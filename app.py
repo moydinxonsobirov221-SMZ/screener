@@ -4,40 +4,48 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-st.set_page_config(layout="wide", page_title="Penny Screener")
+st.set_page_config(layout="wide", page_title="S.M.Z", page_icon="📈")
 
 INF = float("inf")
-PERF = {"Hammasi": None, "Ko'tarilgan": (0, INF), "+10% dan ko'p": (10, INF), "+20% dan ko'p": (20, INF),
-        "+50% dan ko'p": (50, INF), "Tushgan": (-INF, 0), "-10% dan ko'p": (-INF, -10),
-        "-20% dan ko'p": (-INF, -20), "-50% dan ko'p": (-INF, -50)}
-MCAP = {"Hammasi": None, "Nano (<$50M)": (0, 50), "Micro ($50M-$300M)": (50, 300),
-        "$300M dan kam": (0, 300), "Small ($300M-$2B)": (300, 2000)}
-FLOAT = {"Hammasi": None, "5M dan kam": (0, 5), "10M dan kam": (0, 10), "20M dan kam": (0, 20),
-         "50M dan kam": (0, 50), "50M dan ko'p": (50, INF)}
-SHORT = {"Hammasi": None, "5% dan ko'p": (5, INF), "10% dan ko'p": (10, INF), "20% dan ko'p": (20, INF)}
-SMA = ["Hammasi", "Narx ustida", "Narx ostida"]
+PERF = {"Any": None, "Up": (0, INF), "Up 10%": (10, INF), "Up 20%": (20, INF), "Up 50%": (50, INF),
+        "Down": (-INF, 0), "Down 10%": (-INF, -10), "Down 20%": (-INF, -20), "Down 50%": (-INF, -50)}
+MCAP = {"Any": None, "Nano (under $50M)": (0, 50), "Micro ($50M to $300M)": (50, 300),
+        "Under $300M": (0, 300), "Small ($300M to $2B)": (300, 2000)}
+FLOAT = {"Any": None, "Under 5M": (0, 5), "Under 10M": (0, 10), "Under 20M": (0, 20),
+         "Under 50M": (0, 50), "Over 50M": (50, INF)}
+SHORT = {"Any": None, "Over 5%": (5, INF), "Over 10%": (10, INF), "Over 20%": (20, INF)}
+SMA = ["Any", "Price above", "Price below"]
 
 D = dict(sector=[], price=(0.0, 10.0), chg=(-50.0, 300.0), gap=-100.0, relvol=0.0, vol=0, avgvol=0,
-         atr=(0.0, 60.0), rsi=(0.0, 100.0), s20="Hammasi", s50="Hammasi", s200="Hammasi",
-         hid=-100.0, lod=0.0, pw="Hammasi", pm="Hammasi", pq="Hammasi",
-         mcap="Hammasi", flt="Hammasi", short="Hammasi", q="")
+         atr=(0.0, 60.0), rsi=(0.0, 100.0), s20="Any", s50="Any", s200="Any",
+         hid=-100.0, lod=0.0, pw="Any", pm="Any", pq="Any",
+         mcap="Any", flt="Any", short="Any", q="")
 
 PRESETS = {
-    "- strategiya tanlang -": {},
-    "Gap & Go (gap +5%, hajm 2x)": dict(gap=5.0, relvol=2.0),
-    "52 haftalik cho'qqi yaqinida": dict(hid=-5.0, s50="Narx ustida", relvol=1.5),
-    "Oversold (RSI 30 dan past)": dict(rsi=(0.0, 30.0)),
-    "Hajm uyg'ongan, narx tinch": dict(relvol=3.0, chg=(-3.0, 5.0)),
-    "Kichik float runner": dict(flt="20M dan kam", relvol=2.0, chg=(3.0, 300.0)),
-    "Tubdan ko'tarilayotgan (SMA20 ustida)": dict(lod=30.0, s20="Narx ustida", pm="Ko'tarilgan"),
+    "- Select a preset -": {},
+    "Gap & Go (gap +5%, volume 2x)": dict(gap=5.0, relvol=2.0),
+    "Near 52-week high": dict(hid=-5.0, s50="Price above", relvol=1.5),
+    "Oversold (RSI under 30)": dict(rsi=(0.0, 30.0)),
+    "Volume surge, quiet price": dict(relvol=3.0, chg=(-3.0, 5.0)),
+    "Low float runner": dict(flt="Under 20M", relvol=2.0, chg=(3.0, 300.0)),
+    "Rising from lows (above SMA20)": dict(lod=30.0, s20="Price above", pm="Up"),
 }
 
-COLS = {"ticker": "Ticker", "sector": "Sektor", "close": "Narx", "chg": "O'zg %", "gap": "Gap %",
-        "relvol": "Nisbiy hajm", "volume": "Hajm", "avgvol": "O'rt. hajm", "atrp": "ATR %", "rsi": "RSI",
-        "d20": "SMA20 %", "d50": "SMA50 %", "d200": "SMA200 %", "hid": "52h cho'qqi %", "lod": "52h tub %",
-        "pw": "1 hafta %", "pm": "1 oy %", "pq": "3 oy %", "mcap": "Kapital (M$)", "float_sh": "Float (M)",
-        "short_pct": "Short %"}
+COLS = {"ticker": "Ticker", "sector": "Sector", "close": "Price", "chg": "Change %", "gap": "Gap %",
+        "relvol": "Rel Volume", "volume": "Volume", "avgvol": "Avg Volume", "atrp": "ATR %", "rsi": "RSI",
+        "d20": "SMA20 %", "d50": "SMA50 %", "d200": "SMA200 %", "hid": "52W High %", "lod": "52W Low %",
+        "pw": "Perf Week %", "pm": "Perf Month %", "pq": "Perf Quarter %", "mcap": "Market Cap (M)",
+        "float_sh": "Float (M)", "short_pct": "Short Float %"}
 FUND_COLS = ["mcap", "float_sh", "short_pct"]
+
+st.markdown("""<style>
+.smz-brand{position:fixed;top:0;left:0;z-index:1000000;background:#0b1220;padding:7px 20px 7px 16px;border-bottom-right-radius:10px;line-height:1.15;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+.smz-brand .logo{font-size:27px;font-weight:800;letter-spacing:2px;color:#ffffff;font-family:Arial,Helvetica,sans-serif}
+.smz-brand .logo span{color:#26a69a}
+.smz-brand .founder{font-size:10px;color:#9fb0c8;letter-spacing:.3px;font-family:Arial,Helvetica,sans-serif}
+.block-container{padding-top:4.5rem !important}
+</style>
+<div class="smz-brand"><div class="logo">S<span>.</span>M<span>.</span>Z</div><div class="founder">Founder: Sobirov.Moydinxon.Zaynobiddinvich</div></div>""", unsafe_allow_html=True)
 
 
 def reset():
@@ -55,7 +63,7 @@ for k, v in D.items():
     st.session_state.setdefault(k, v)
 
 
-@st.cache_data(ttl=3600, show_spinner="Ma'lumot hisoblanmoqda...")
+@st.cache_data(ttl=3600, show_spinner="Calculating indicators...")
 def load():
     con = sqlite3.connect("data.db")
     p = pd.read_sql("select * from prices", con)
@@ -116,9 +124,9 @@ def opt(df, col, table, key):
 
 
 def sma_f(df, col, v):
-    if v == "Narx ustida":
+    if v == "Price above":
         return df[df[col] > 0]
-    if v == "Narx ostida":
+    if v == "Price below":
         return df[df[col] < 0]
     return df
 
@@ -140,31 +148,31 @@ def candle(d):
 p, has_f = load()
 dates = sorted(p["date"].unique(), reverse=True)
 
-st.title("Penny Stock Screener")
+st.title("Stock Screener")
 c1, c2, c3 = st.columns([3, 1, 1])
-c1.selectbox("Tayyor strategiya", list(PRESETS), key="preset", on_change=apply_preset)
-c2.selectbox("Sana", dates, key="date")
+c1.selectbox("Preset screens", list(PRESETS), key="preset", on_change=apply_preset)
+c2.selectbox("Date", dates, key="date")
 c3.write("")
-c3.button("Filtrlarni tozalash", on_click=reset)
+c3.button("Reset filters", on_click=reset)
 
-tabs = st.tabs(["Asosiy", "Texnik", "SMA / RSI / 52h", "Fundamental"])
+tabs = st.tabs(["Descriptive", "Technical", "Trend (SMA / RSI / 52W)", "Fundamental"])
 with tabs[0]:
     a = st.columns(4)
-    a[0].multiselect("Sektor", sorted(p["sector"].dropna().unique()), key="sector")
-    a[1].slider("Narx ($)", 0.0, 20.0, key="price", step=0.1)
-    a[2].slider("Bugungi o'zgarish (%)", -50.0, 300.0, key="chg", step=1.0)
-    a[3].text_input("Ticker qidirish", key="q")
+    a[0].multiselect("Sector", sorted(p["sector"].dropna().unique()), key="sector")
+    a[1].slider("Price ($)", 0.0, 20.0, key="price", step=0.1)
+    a[2].slider("Change today (%)", -50.0, 300.0, key="chg", step=1.0)
+    a[3].text_input("Search ticker", key="q")
 with tabs[1]:
     b = st.columns(4)
     b[0].number_input("Min gap (%)", -100.0, 300.0, key="gap", step=1.0)
-    b[1].number_input("Min nisbiy hajm (x)", 0.0, 100.0, key="relvol", step=0.5)
-    b[2].number_input("Min hajm (bugun)", 0, 1000000000, key="vol", step=50000)
-    b[3].number_input("Min o'rtacha hajm (20 kun)", 0, 1000000000, key="avgvol", step=50000)
+    b[1].number_input("Min relative volume (x)", 0.0, 100.0, key="relvol", step=0.5)
+    b[2].number_input("Min volume (today)", 0, 1000000000, key="vol", step=50000)
+    b[3].number_input("Min avg volume (20d)", 0, 1000000000, key="avgvol", step=50000)
     b2 = st.columns(4)
-    b2[0].slider("ATR (kunlik harakat %)", 0.0, 60.0, key="atr", step=0.5)
-    b2[1].selectbox("1 hafta o'zgarishi", list(PERF), key="pw")
-    b2[2].selectbox("1 oy o'zgarishi", list(PERF), key="pm")
-    b2[3].selectbox("3 oy o'zgarishi", list(PERF), key="pq")
+    b2[0].slider("ATR (daily range %)", 0.0, 60.0, key="atr", step=0.5)
+    b2[1].selectbox("Performance (week)", list(PERF), key="pw")
+    b2[2].selectbox("Performance (month)", list(PERF), key="pm")
+    b2[3].selectbox("Performance (quarter)", list(PERF), key="pq")
 with tabs[2]:
     c = st.columns(4)
     c[0].selectbox("SMA20", SMA, key="s20")
@@ -172,13 +180,13 @@ with tabs[2]:
     c[2].selectbox("SMA200", SMA, key="s200")
     c[3].slider("RSI (14)", 0.0, 100.0, key="rsi", step=1.0)
     c2_ = st.columns(4)
-    c2_[0].slider("52 hafta cho'qqisidan eng ko'pi bilan pastda (%)", -100.0, 0.0, key="hid", step=1.0)
-    c2_[1].number_input("52 hafta tubidan kamida yuqorida (%)", 0.0, 5000.0, key="lod", step=5.0)
+    c2_[0].slider("Max distance below 52W high (%)", -100.0, 0.0, key="hid", step=1.0)
+    c2_[1].number_input("Min distance above 52W low (%)", 0.0, 5000.0, key="lod", step=5.0)
 with tabs[3]:
     if not has_f:
-        st.info("Fundamental ma'lumot (kapital, float, short) hali yuklanmagan. Bot uni bir necha soatda o'zi to'ldiradi.")
+        st.info("Fundamental data (market cap, float, short float) is still loading. It fills in automatically within a few hours.")
     d_ = st.columns(3)
-    d_[0].selectbox("Bozor kapitali", list(MCAP), key="mcap", disabled=not has_f)
+    d_[0].selectbox("Market cap", list(MCAP), key="mcap", disabled=not has_f)
     d_[1].selectbox("Float", list(FLOAT), key="flt", disabled=not has_f)
     d_[2].selectbox("Short float", list(SHORT), key="short", disabled=not has_f)
 
@@ -209,15 +217,15 @@ if S["q"].strip():
 
 cols = [c for c in COLS if has_f or c not in FUND_COLS]
 h = st.columns([3, 1, 1])
-h[0].subheader(f"{S['date']}: {len(x)} ta aksiya topildi")
-sort_name = h[1].selectbox("Saralash", [COLS[c] for c in cols], index=cols.index("chg"))
-asc = h[2].checkbox("O'sish tartibida", value=False)
+h[0].subheader(f"{S['date']}: {len(x)} stocks found")
+sort_name = h[1].selectbox("Sort by", [COLS[c] for c in cols], index=cols.index("chg"))
+asc = h[2].checkbox("Ascending", value=False)
 inv = {v: k for k, v in COLS.items()}
 x = x.sort_values(inv[sort_name], ascending=asc)
 show = x[cols].rename(columns=COLS).round(2).reset_index(drop=True)
 
 if show.empty:
-    st.info("Bu filtrlar bo'yicha aksiya topilmadi. Filtrlarni yumshating.")
+    st.info("No stocks match these filters. Try loosening them.")
     st.stop()
 
 sel = None
@@ -227,22 +235,25 @@ try:
         sel = show.iloc[ev.selection.rows[0]]["Ticker"]
 except TypeError:
     stretch(st.dataframe, show, height=480, hide_index=True)
-st.download_button("CSV yuklab olish", show.to_csv(index=False).encode(), "screener.csv", "text/csv")
+st.download_button("Download CSV", show.to_csv(index=False).encode(), "smz_screener.csv", "text/csv")
 
 st.divider()
 tickers = list(show["Ticker"])
-pick = st.selectbox("Grafik uchun ticker (jadvaldan qator ham bosish mumkin)", tickers,
+pick = st.selectbox("Chart ticker (or click a row in the table)", tickers,
                     index=tickers.index(sel) if sel in tickers else 0)
 row = x[x["ticker"] == pick].iloc[0]
 m = st.columns(6)
-m[0].metric("Narx", f"${row['close']:.2f}", f"{row['chg']:+.1f}%")
-m[1].metric("Nisbiy hajm", f"{row['relvol']:.1f}x" if pd.notna(row["relvol"]) else "-")
+m[0].metric("Price", f"${row['close']:.2f}", f"{row['chg']:+.1f}%")
+m[1].metric("Rel Volume", f"{row['relvol']:.1f}x" if pd.notna(row["relvol"]) else "-")
 m[2].metric("RSI", f"{row['rsi']:.0f}" if pd.notna(row["rsi"]) else "-")
 m[3].metric("ATR", f"{row['atrp']:.1f}%" if pd.notna(row["atrp"]) else "-")
-m[4].metric("52h cho'qqidan", f"{row['hid']:.0f}%" if pd.notna(row["hid"]) else "-")
-m[5].metric("Sektor", str(row["sector"]))
+m[4].metric("From 52W High", f"{row['hid']:.0f}%" if pd.notna(row["hid"]) else "-")
+m[5].metric("Sector", str(row["sector"]))
 hist = p[p["ticker"] == pick].tail(180)
 stretch(st.altair_chart, candle(hist))
-st.markdown(f"Yangiliklar: [Yahoo](https://finance.yahoo.com/quote/{pick}/news) | "
+st.markdown(f"News: [Yahoo](https://finance.yahoo.com/quote/{pick}/news) | "
             f"[Finviz](https://finviz.com/quote.ashx?t={pick}) | "
             f"[TradingView](https://www.tradingview.com/symbols/{pick}/)")
+
+st.divider()
+st.caption("S.M.Z | Founder: Sobirov.Moydinxon.Zaynobiddinvich | Data: Yahoo Finance (end of day). Not financial advice.")
