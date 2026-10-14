@@ -1,8 +1,13 @@
+import json
 import sqlite3
 import numpy as np
 import pandas as pd
 import streamlit as st
 import altair as alt
+try:
+    import streamlit.components.v1 as components
+except Exception:
+    components = None
 
 st.set_page_config(layout="wide", page_title="S.M.Z", page_icon="📈")
 
@@ -215,45 +220,93 @@ if has_f:
 if S["q"].strip():
     x = x[x["ticker"].str.contains(S["q"].strip().upper(), regex=False)]
 
+def tv_chart(sym, height):
+    cfg = {"autosize": True, "symbol": sym, "interval": "D", "timezone": "Asia/Tashkent", "theme": "dark",
+           "style": "1", "locale": "en", "allow_symbol_change": True, "hide_side_toolbar": False,
+           "withdateranges": True, "save_image": True, "calendar": False, "details": False,
+           "support_host": "https://www.tradingview.com"}
+    html = ('<div class="tradingview-widget-container" style="height:%dpx;width:100%%">'
+            '<div class="tradingview-widget-container__widget" style="height:%dpx;width:100%%"></div>'
+            '<script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>'
+            '%s</script></div>') % (height, height - 8, json.dumps(cfg))
+    html = '<style>html,body{margin:0;background:#0e1117}</style>' + html
+    try:
+        if hasattr(st, "iframe"):
+            st.iframe(html, height=height)
+        elif components is not None:
+            components.html(html, height=height)
+        else:
+            raise RuntimeError("no iframe support")
+    except Exception:
+        st.warning("Chart could not load here. Use the TradingView link below.")
+
+
+def chart_panel(pick, height):
+    r = p[(p["ticker"] == pick) & (p["date"] == S["date"])]
+    if not r.empty:
+        r = r.iloc[0]
+        m = st.columns(5)
+        m[0].metric(pick, f"${r['close']:.2f}", f"{r['chg']:+.1f}%")
+        m[1].metric("Rel Volume", f"{r['relvol']:.1f}x" if pd.notna(r["relvol"]) else "-")
+        m[2].metric("RSI", f"{r['rsi']:.0f}" if pd.notna(r["rsi"]) else "-")
+        m[3].metric("ATR", f"{r['atrp']:.1f}%" if pd.notna(r["atrp"]) else "-")
+        m[4].metric("From 52W High", f"{r['hid']:.0f}%" if pd.notna(r["hid"]) else "-")
+    st.radio("Chart", ["TradingView", "Basic"], horizontal=True, key="chart_mode", label_visibility="collapsed")
+    if S["chart_mode"] == "TradingView":
+        tv_chart(pick, height)
+    else:
+        stretch(st.altair_chart, candle(p[p["ticker"] == pick].tail(180)))
+    st.markdown(f"News: [Yahoo](https://finance.yahoo.com/quote/{pick}/news) | "
+                f"[Finviz](https://finviz.com/quote.ashx?t={pick}) | "
+                f"[Open in TradingView](https://www.tradingview.com/chart/?symbol={pick})")
+
+
+def table(df_cols, height):
+    show = x[df_cols].rename(columns=COLS).round(2).reset_index(drop=True)
+    sel = None
+    try:
+        ev = stretch(st.dataframe, show, height=height, hide_index=True, on_select="rerun", selection_mode="single-row")
+        if ev.selection.rows:
+            sel = show.iloc[ev.selection.rows[0]]["Ticker"]
+    except TypeError:
+        stretch(st.dataframe, show, height=height, hide_index=True)
+    return sel
+
+
 cols = [c for c in COLS if has_f or c not in FUND_COLS]
-h = st.columns([3, 1, 1])
+h = st.columns([3, 1.2, 1, 1.6])
 h[0].subheader(f"{S['date']}: {len(x)} stocks found")
 sort_name = h[1].selectbox("Sort by", [COLS[c] for c in cols], index=cols.index("chg"))
 asc = h[2].checkbox("Ascending", value=False)
+layout = h[3].radio("Layout", ["Chart + list", "Full table"], horizontal=True, key="layout")
 inv = {v: k for k, v in COLS.items()}
 x = x.sort_values(inv[sort_name], ascending=asc)
-show = x[cols].rename(columns=COLS).round(2).reset_index(drop=True)
 
-if show.empty:
+if x.empty:
     st.info("No stocks match these filters. Try loosening them.")
     st.stop()
 
-sel = None
-try:
-    ev = stretch(st.dataframe, show, height=480, hide_index=True, on_select="rerun", selection_mode="single-row")
-    if ev.selection.rows:
-        sel = show.iloc[ev.selection.rows[0]]["Ticker"]
-except TypeError:
-    stretch(st.dataframe, show, height=480, hide_index=True)
-st.download_button("Download CSV", show.to_csv(index=False).encode(), "smz_screener.csv", "text/csv")
+full = x[cols].rename(columns=COLS).round(2)
+tickers = list(x["ticker"])
+
+if layout == "Chart + list":
+    left, right = st.columns([2, 5])
+    with left:
+        sel = table(["ticker", "close", "chg", "relvol", "volume", "gap"], 740)
+        st.download_button("Download CSV", full.to_csv(index=False).encode(), "smz_screener.csv", "text/csv")
+    if sel:
+        S["chart_ticker"] = sel
+    pick = S.get("chart_ticker") or tickers[0]
+    with right:
+        chart_panel(pick, 700)
+else:
+    sel = table(cols, 480)
+    st.download_button("Download CSV", full.to_csv(index=False).encode(), "smz_screener.csv", "text/csv")
+    if sel:
+        S["chart_ticker"] = sel
+    pick = S.get("chart_ticker") or tickers[0]
+    st.divider()
+    chart_panel(pick, 680)
 
 st.divider()
-tickers = list(show["Ticker"])
-pick = st.selectbox("Chart ticker (or click a row in the table)", tickers,
-                    index=tickers.index(sel) if sel in tickers else 0)
-row = x[x["ticker"] == pick].iloc[0]
-m = st.columns(6)
-m[0].metric("Price", f"${row['close']:.2f}", f"{row['chg']:+.1f}%")
-m[1].metric("Rel Volume", f"{row['relvol']:.1f}x" if pd.notna(row["relvol"]) else "-")
-m[2].metric("RSI", f"{row['rsi']:.0f}" if pd.notna(row["rsi"]) else "-")
-m[3].metric("ATR", f"{row['atrp']:.1f}%" if pd.notna(row["atrp"]) else "-")
-m[4].metric("From 52W High", f"{row['hid']:.0f}%" if pd.notna(row["hid"]) else "-")
-m[5].metric("Sector", str(row["sector"]))
-hist = p[p["ticker"] == pick].tail(180)
-stretch(st.altair_chart, candle(hist))
-st.markdown(f"News: [Yahoo](https://finance.yahoo.com/quote/{pick}/news) | "
-            f"[Finviz](https://finviz.com/quote.ashx?t={pick}) | "
-            f"[TradingView](https://www.tradingview.com/symbols/{pick}/)")
-
-st.divider()
-st.caption("S.M.Z | Founder: Sobirov.Moydinxon.Zaynobiddinvich | Data: Yahoo Finance (end of day). Not financial advice.")
+st.caption("S.M.Z | Founder: Sobirov.Moydinxon.Zaynobiddinvich | Data: Yahoo Finance (end of day). Charts: TradingView. Not financial advice.")
