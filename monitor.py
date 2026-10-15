@@ -34,10 +34,24 @@ def update():
 
 
 def refresh_fund(limit=200, max_sec=300):
-    con.execute("create table if not exists fund(ticker text primary key, mcap real, float_sh real, short_pct real, updated text)")
-    have = dict(con.execute("select ticker, updated from fund").fetchall())
+    """Fill the fund table (market cap, float, short %, industry, exchange). Safe to run repeatedly."""
+    con.execute("create table if not exists fund(ticker text primary key, mcap real, float_sh real, short_pct real, updated text, industry text, exchange text)")
+    for col in ("industry", "exchange"):
+        try:
+            con.execute(f"alter table fund add column {col} text")
+        except sqlite3.OperationalError:
+            pass
+    have = {r[0]: r for r in con.execute("select ticker, updated, industry, exchange from fund")}
+    today = date.today().isoformat()
     cutoff = (date.today() - timedelta(days=7)).isoformat()
-    todo = [s for s in tickers if have.get(s, "") < cutoff][:limit]
+
+    def stale(s):
+        r = have.get(s)
+        if r is None or (r[1] or "") < cutoff:
+            return True
+        return (r[2] is None or r[3] is None) and (r[1] or "") < today
+
+    todo = [s for s in tickers if stale(s)][:limit]
     t0 = time.time(); n = 0
     for s in todo:
         if time.time() - t0 > max_sec: break
@@ -48,12 +62,14 @@ def refresh_fund(limit=200, max_sec=300):
                 print("fund: limit, to'xtadi"); break
             info = {}
         sp = info.get("shortPercentOfFloat")
-        con.execute("insert or replace into fund values(?,?,?,?,?)",
-                    (s, info.get("marketCap"), info.get("floatShares"), sp * 100 if sp is not None else None, date.today().isoformat()))
+        con.execute("insert or replace into fund(ticker,mcap,float_sh,short_pct,updated,industry,exchange) values(?,?,?,?,?,?,?)",
+                    (s, info.get("marketCap"), info.get("floatShares"), sp * 100 if sp is not None else None,
+                     today, info.get("industry"), info.get("exchange")))
         n += 1
         time.sleep(0.7)
     con.commit()
     print("fund yangilandi:", n)
+
 
 POS = {"fda approval":3,"approved":2,"approval":2,"clearance":2,"phase 3":2,"phase 2":1,"topline":2,"positive results":3,"breakthrough":2,"contract":2,"awarded":2,"award":1,"purchase order":2,"partnership":2,"collaboration":1,"definitive agreement":3,"letter of intent":2,"agreement":1,"acquisition":2,"acquire":2,"merger":2,"buyout":3,"takeover":3,"strategic alternatives":2,"record revenue":2,"beats":2,"raises guidance":3,"upgrade":1,"patent":1,"regained compliance":2,"uplist":2,"launch":1,"expands":1}
 NEG = ["offering","dilution","registered direct","reverse split","delisting","bankruptcy","lawsuit","investigation","downgrade","going concern","misses","warning","halt","fraud","recall","resigns","default","class action"]
