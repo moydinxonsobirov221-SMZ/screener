@@ -308,12 +308,51 @@ def embed_widget(script: str, cfg: dict, height: int) -> None:
     render_iframe(doc, height)
 
 
-def tv_chart(symbol: str, height: int) -> None:
-    embed_widget("embed-widget-advanced-chart.js", {
-        "autosize": True, "symbol": symbol, "interval": "D", "timezone": "Asia/Tashkent", "theme": "dark",
-        "style": "1", "locale": "en", "allow_symbol_change": True, "hide_side_toolbar": False,
-        "withdateranges": True, "save_image": True, "calendar": False, "details": False,
-        "support_host": "https://www.tradingview.com"}, height)
+CHART_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:#0e1117;overflow:hidden}</style></head><body>
+<div id="box" class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div></div>
+<script>
+(function () {
+  var cfg = __CFG__;
+  var H = __H__;
+  try {
+    var ph = window.parent.innerHeight;
+    if (ph && ph > 0) { H = Math.max(520, ph - __OFFSET__); }
+    if (window.frameElement) {
+      window.frameElement.style.height = H + "px";
+      window.frameElement.setAttribute("height", H);
+    }
+  } catch (e) {}
+  cfg.autosize = false; cfg.width = "100%"; cfg.height = H;
+  var box = document.getElementById("box");
+  box.style.height = H + "px";
+  var s = document.createElement("script");
+  s.type = "text/javascript"; s.async = true;
+  s.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+  s.innerHTML = JSON.stringify(cfg);
+  box.appendChild(s);
+})();
+</script></body></html>"""
+
+
+def chart_doc(symbol: str, init_height: int = 700, offset: int = 210) -> str:
+    """HTML for the TradingView Advanced Chart with an explicit pixel height.
+
+    The height fills the browser window (window height - offset) when the iframe may read it,
+    otherwise init_height is used. Pixel sizes avoid the 'tiny chart' problem of percent sizing.
+    """
+    cfg = {"autosize": False, "width": "100%", "height": init_height, "symbol": symbol, "interval": "D",
+           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": "en",
+           "allow_symbol_change": True, "hide_side_toolbar": False, "withdateranges": True,
+           "save_image": True, "calendar": False, "details": False,
+           "support_host": "https://www.tradingview.com"}
+    payload = json.dumps(cfg).replace("</", "<\\/")
+    return (CHART_TEMPLATE.replace("__CFG__", payload).replace("__H__", str(int(init_height)))
+            .replace("__OFFSET__", str(int(offset))))
+
+
+def tv_chart(symbol: str, init_height: int = 700, offset: int = 210) -> None:
+    render_iframe(chart_doc(symbol, init_height, offset), init_height)
 
 
 def ticker_tape() -> None:
@@ -577,6 +616,7 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
 
     @st.dialog(f"{sym}  |  TradingView", width="large")
     def _dialog():
+        parts = []
         if row is not None:
             parts = [f"<b>${row['close']:.2f}</b>", f"{row['chg']:+.2f}%"]
             if pd.notna(row["relvol"]):
@@ -587,11 +627,11 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
                 parts.append(f"ATR {row['atrp']:.1f}%")
             if pd.notna(row.get("sector")):
                 parts.append(html.escape(str(row["sector"])))
-            st.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
-        tv_chart(tv_sym, 780)
-        st.markdown(f"News: [Yahoo](https://finance.yahoo.com/quote/{sym}/news) | "
-                    f"[Finviz](https://finviz.com/quote.ashx?t={sym}) | "
-                    f"[Open in TradingView](https://www.tradingview.com/chart/?symbol={tv_sym})")
+        parts += [f'<a href="https://finance.yahoo.com/quote/{sym}/news" target="_blank">Yahoo news</a>',
+                  f'<a href="https://finviz.com/quote.ashx?t={sym}" target="_blank">Finviz</a>',
+                  f'<a href="https://www.tradingview.com/chart/?symbol={tv_sym}" target="_blank">Open in TradingView</a>']
+        st.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
+        tv_chart(tv_sym, 700, 210)
 
     _dialog()
 
