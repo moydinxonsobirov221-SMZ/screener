@@ -3,4 +3,4 @@ yfinance
 pandas
 requests
 plotly
-anthropic
+google-genai
