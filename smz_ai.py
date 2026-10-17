@@ -98,7 +98,8 @@ def run_analysis(ticker: str, row) -> str:
                 {"role": "user", "content": build_facts(ticker, row)},
             ],
             "temperature": 0.3,
-            "max_tokens": 700,
+            "max_tokens": 2000,
+            "reasoning_effort": "low",
         },
         timeout=60,
     )
