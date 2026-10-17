@@ -110,7 +110,6 @@ def _get_client(api_key: str):
     from google import genai
     return genai.Client(api_key=api_key)
 
-
 def _run_analysis(ticker: str) -> str:
     from google.genai import types
 
@@ -121,17 +120,28 @@ def _run_analysis(ticker: str) -> str:
     model = st.secrets.get("GEMINI_MODEL", DEFAULT_MODEL)
     today = dt.date.today().isoformat()
     client = _get_client(api_key)
+    prompt = f"Tiker: {ticker}. Bugungi sana: {today}. Tahlil qiling."
 
-    response = client.models.generate_content(
-        model=model,
-        contents=f"Tiker: {ticker}. Bugungi sana: {today}. Tahlil qiling.",
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            max_output_tokens=2000,
-        ),
-    )
-    text = (response.text or "").strip()
+    def _call(use_search: bool) -> str:
+        cfg = dict(system_instruction=SYSTEM_PROMPT, max_output_tokens=2000)
+        if use_search:
+            cfg["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+        r = client.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(**cfg),
+        )
+        return (r.text or "").strip()
+
+    try:
+        text = _call(True)
+    except Exception as e:  # noqa: BLE001
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            text = _call(False)
+            if text:
+                text += "\n\n_⚠️ Jonli web-qidiruv limiti tugagan, tahlil umumiy bilimga asoslangan. Yangiliklar eskirgan bo'lishi mumkin._"
+        else:
+            raise
     if not text:
         raise RuntimeError("AI bo'sh javob qaytardi.")
     return text
