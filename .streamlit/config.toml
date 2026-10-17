@@ -1,0 +1,21 @@
+[theme]
+base = "dark"
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#000000"
+textColor = "#e6e6e6"
+primaryColor = "#30cc5a"
+borderColor = "#1f1f1f"
+dataframeBorderColor = "#0f0f0f"
+dataframeHeaderBackgroundColor = "#000000"
+dataframeHeaderTextColor = "#9a9a9a"
+showWidgetBorder = true
+showSidebarBorder = false
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
