@@ -2,13 +2,12 @@
 S.M.Z AI moduli — TradingView grafigi + to'liq ekranli AI tahlil oynasi.
 
 O'rnatish:
-    pip install anthropic streamlit
-    requirements.txt ga:  anthropic
+    requirements.txt ga:  google-genai
 
 Kalit (Streamlit Cloud -> Settings -> Secrets):
-    ANTHROPIC_API_KEY = "sk-ant-..."
+    GEMINI_API_KEY = "AIza..."
     # ixtiyoriy:
-    ANTHROPIC_MODEL = "claude-sonnet-4-6"
+    GEMINI_MODEL = "gemini-2.5-flash"
 
 Asosiy kodingizda ticker bosilganda:
     from smz_ai import render_ticker_detail
@@ -38,7 +37,7 @@ Berilgan aksiya tikerini quyidagi 8 ta band asosida, eng so'nggi joriy faktlarga
 "KUTING (HOLD/WAIT)" yoki "SOTMANG / SOTING (SELL)" signallaridan birini aniq, ikkilanishlarsiz yozing va qisqa xulosa bering.
 Javobni o'zbek tilida, 8 ta raqamlangan band ko'rinishida bering. Jami 77 so'zdan oshmasin."""
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 # ----------------------------------------------------------------------
@@ -108,32 +107,31 @@ def _render_chart_view(ticker: str):
 # ----------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
 def _get_client(api_key: str):
-    import anthropic
-    return anthropic.Anthropic(api_key=api_key)
+    from google import genai
+    return genai.Client(api_key=api_key)
 
 
 def _run_analysis(ticker: str) -> str:
-    api_key = st.secrets.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY Streamlit secrets ichida topilmadi.")
+    from google.genai import types
 
-    model = st.secrets.get("ANTHROPIC_MODEL", DEFAULT_MODEL)
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY Streamlit secrets ichida topilmadi.")
+
+    model = st.secrets.get("GEMINI_MODEL", DEFAULT_MODEL)
     today = dt.date.today().isoformat()
     client = _get_client(api_key)
 
-    response = client.messages.create(
+    response = client.models.generate_content(
         model=model,
-        max_tokens=2000,
-        system=SYSTEM_PROMPT,
-        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 4}],
-        messages=[
-            {
-                "role": "user",
-                "content": f"Tiker: {ticker}. Bugungi sana: {today}. Tahlil qiling.",
-            }
-        ],
+        contents=f"Tiker: {ticker}. Bugungi sana: {today}. Tahlil qiling.",
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            max_output_tokens=2000,
+        ),
     )
-    text = "\n".join(b.text for b in response.content if b.type == "text").strip()
+    text = (response.text or "").strip()
     if not text:
         raise RuntimeError("AI bo'sh javob qaytardi.")
     return text
