@@ -792,11 +792,11 @@ def main() -> None:
 
 
 # =============================================================================
-# S.M.Z AI (Gemini) - grafik oynasiga "S.M.Z AI" tugmasi va AI tahlil oynasi
+# S.M.Z AI (Groq) - grafik oynasiga "S.M.Z AI" tugmasi va AI tahlil oynasi
 # =============================================================================
 import datetime as dt
 
-from smz_ai import _run_analysis
+from smz_ai import build_facts, run_analysis
 
 
 def _ai_open() -> None:
@@ -807,7 +807,7 @@ def _ai_close() -> None:
     S["ai_view"] = False
 
 
-def ai_panel(sym: str) -> None:
+def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
     """Grafik o'rnini egallaydigan to'liq AI tahlil oynasi."""
     top = st.columns([5, 1])
     top[0].markdown(f"### S.M.Z AI · {sym}")
@@ -821,7 +821,7 @@ def ai_panel(sym: str) -> None:
     if ckey not in cache:
         with st.spinner(f"{sym} tahlil qilinmoqda..."):
             try:
-                cache[ckey] = _run_analysis(sym)
+                cache[ckey] = run_analysis(sym, row)
             except Exception as e:  # noqa: BLE001
                 st.error(f"AI xatosi: {e}")
                 return
@@ -840,7 +840,7 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
     @st.dialog(sym, width="large")
     def _dialog():
         if S.get("ai_view"):
-            ai_panel(sym)
+            ai_panel(sym, row)
             return
         with st.container(border=True):
             left, right = st.columns([5, 1])
