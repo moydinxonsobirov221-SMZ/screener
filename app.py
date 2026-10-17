@@ -791,5 +791,72 @@ def main() -> None:
         open_chart(to_open, r.iloc[0] if not r.empty else None)
 
 
+# =============================================================================
+# S.M.Z AI (Gemini) - grafik oynasiga "S.M.Z AI" tugmasi va AI tahlil oynasi
+# =============================================================================
+import datetime as dt
+
+from smz_ai import _run_analysis
+
+
+def _ai_open() -> None:
+    S["ai_view"] = True
+
+
+def _ai_close() -> None:
+    S["ai_view"] = False
+
+
+def ai_panel(sym: str) -> None:
+    """Grafik o'rnini egallaydigan to'liq AI tahlil oynasi."""
+    top = st.columns([5, 1])
+    top[0].markdown(f"### S.M.Z AI · {sym}")
+    stretch(top[1].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+
+    cache = S.setdefault("ai_cache", {})
+    ckey = (sym, dt.date.today().isoformat())
+    if st.button("↻ Qayta tahlil", key="ai_refresh"):
+        cache.pop(ckey, None)
+
+    if ckey not in cache:
+        with st.spinner(f"{sym} tahlil qilinmoqda..."):
+            try:
+                cache[ckey] = _run_analysis(sym)
+            except Exception as e:  # noqa: BLE001
+                st.error(f"AI xatosi: {e}")
+                return
+
+    with st.container(border=True):
+        st.markdown(cache[ckey])
+    st.caption("Bu moliyaviy maslahat emas. Qaror o'zingizniki.")
+
+
+def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
+    """Grafik oynasi: ramka ichida 'S.M.Z AI' tugmasi, bosilsa grafik o'rniga AI tahlil."""
+    S["ai_view"] = False
+    exch = row["exchange"] if row is not None and "exchange" in row else None
+    full_sym = chart_symbol(sym, exch)
+
+    @st.dialog(sym, width="large")
+    def _dialog():
+        if S.get("ai_view"):
+            ai_panel(sym)
+            return
+        with st.container(border=True):
+            left, right = st.columns([5, 1])
+            if row is not None:
+                parts = [f"<b>${row['close']:.2f}</b>", f"{row['chg']:+.2f}%"]
+                if pd.notna(row["relvol"]):
+                    parts.append(f"Rel Volume {row['relvol']:.1f}")
+                if pd.notna(row["rsi"]):
+                    parts.append(f"RSI {row['rsi']:.0f}")
+                if pd.notna(row["atr"]):
+                    parts.append(f"ATR {row['atr']:.2f}")
+                left.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>',
+                              unsafe_allow_html=True)
+            stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+        chart_widget(full_sym, 700, 170)
+
+    _dialog()
 if __name__ == "__main__":
     main()
