@@ -108,4 +108,4 @@ def run_analysis(ticker: str, row) -> str:
     text = (resp.json()["choices"][0]["message"]["content"] or "").strip()
     if not text:
         raise RuntimeError("AI bo'sh javob qaytardi.")
-    return text
+    return text.replace("$", "\\$")
