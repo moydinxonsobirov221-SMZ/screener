@@ -304,7 +304,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
   function legend(scale, label) {
     var f = [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1];
     document.getElementById("legend").innerHTML =
-      "<div>Size: Market Cap &nbsp;|&nbsp; Border: " + esc(label) + " performance</div><div class=\"strip\">" +
+      "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance</div><div class=\"strip\">" +
       f.map(function (x, i) {
         var v = Math.round(x * scale);
         return "<span style=\"background:" + COLORS[i] + "\">" + (v > 0 ? "+" : "") + v + "%</span>";
@@ -356,15 +356,15 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
     var node = svg.append("g").selectAll("g").data(root.descendants()).join("g");
     var circles = node.append("circle")
       .attr("class", function (d) { return d.depth === 0 ? "root" : (d.children ? "zone" : "leaf"); })
-      .attr("fill", "#000000")
-      .attr("stroke", function (d) { return d.depth === 0 ? "#2b2b2b" : (d.children ? "#1c1c1c" : color(d.data.d.perf)); })
-      .attr("stroke-width", function (d) { return d.depth === 0 ? 2 : (d.children ? 1 : 2.4); });
+      .attr("fill", function (d) { return d.children ? "#000000" : color(d.data.d.perf); })
+      .attr("stroke", function (d) { return d.depth === 0 ? "#2b2b2b" : (d.children ? "#1c1c1c" : "#000000"); })
+      .attr("stroke-width", function (d) { return d.depth === 0 ? 2 : (d.children ? 1 : 1.6); });
     var leaves = node.filter(function (d) { return !d.children; });
     var zones = node.filter(function (d) { return d.children && d.depth > 0; });
     leaves.append("text").attr("class", "t").attr("text-anchor", "middle")
       .text(function (d) { return d.data.name; });
     leaves.append("text").attr("class", "p").attr("text-anchor", "middle")
-      .attr("fill", function (d) { return color(d.data.d.perf); })
+      .attr("fill", "#ffffff")
       .text(function (d) { return fmtPct(d.data.d.perf); });
     zones.append("text").attr("class", "z").attr("text-anchor", "middle")
       .text(function (d) { return d.data.name; });
@@ -376,7 +376,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
       node.attr("transform", function (d) { return "translate(" + ((d.x - v[0]) * k) + "," + ((d.y - v[1]) * k) + ")"; });
       circles.attr("r", function (d) { return d.r * k; })
         .attr("stroke-width", function (d) {
-          return d.depth === 0 ? 2 : (d.children ? 1 : clamp(0.9, 3, d.r * k * 0.18));
+          return d.depth === 0 ? 2 : (d.children ? 1 : clamp(0.6, 2, d.r * k * 0.06));
         });
       leaves.select("text.t").each(function (d) {
         var rk = d.r * k, fs = clamp(7, 18, rk * 0.42), two = rk >= 26;
@@ -415,7 +415,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
     circles.on("mouseover", function (ev, d) {
         if (d.depth === 0) { return; }
         tip.innerHTML = tipHtml(d); tip.style.display = "block";
-        if (!d.children) { d3.select(this).attr("stroke-width", 3.6); }
+        if (!d.children) { d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2.4); }
       })
       .on("mousemove", function (ev) {
         var x = ev.clientX + 14, y = ev.clientY + 14;
@@ -425,7 +425,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
       })
       .on("mouseout", function (ev, d) {
         tip.style.display = "none";
-        if (!d.children && view) { d3.select(this).attr("stroke-width", clamp(0.9, 3, d.r * (size / view[2]) * 0.18)); }
+        if (!d.children && view) { d3.select(this).attr("stroke", "#000000").attr("stroke-width", clamp(0.6, 2, d.r * (size / view[2]) * 0.06)); }
       })
       .on("click", function (ev, d) {
         ev.stopPropagation();
@@ -904,7 +904,7 @@ def view_overview(day: pd.DataFrame, meta: dict) -> list:
 
 
 def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
-    """Bubble map: one big circle > sectors > industries > companies. Size = market cap, border = performance."""
+    """Bubble map: one big circle > sectors > industries > companies. Size = market cap, fill = performance."""
     if not meta["has_fund"]:
         st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
         return []
