@@ -248,8 +248,8 @@ BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#e6e6e6}
 svg{display:block;margin:0 auto;background:#000}
 .leaf{cursor:pointer}.zone{cursor:zoom-in}.root{cursor:zoom-out}
-text.t{fill:#fff;font-weight:700;pointer-events:none}
-text.p{font-weight:600;pointer-events:none}
+text.t{fill:#fff;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2.5px;stroke-linejoin:round}
+text.p{font-weight:600;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px;stroke-linejoin:round}
 text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round}
 #tip{position:fixed;pointer-events:none;display:none;background:#000;border:1px solid #2a2a2a;border-radius:6px;
   padding:7px 10px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 8px 20px rgba(0,0,0,.9)}
@@ -264,7 +264,8 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
   var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
-  var COLORS = ["#f63538", "#bf4045", "#8b444e", "#414554", "#35764e", "#2f9e4f", "#30cc5a"];
+  var COLORS = ["#ff1f3d", "#c42a40", "#82303b", "#3b4150", "#2a7a4a", "#1fa85b", "#19e068"];
+  var SECTOR_COLORS = ["#4f8cff", "#ff9f43", "#b36bff", "#2ed1c4", "#ffd24a", "#ff6b9a", "#8bd45a", "#5ad1ff", "#ff7a59", "#d4b02a", "#a0a8ff"];
   var args = null, lastKey = null, view = null, resizeTimer = null;
 
   function post(type, extra) {
@@ -331,9 +332,14 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
     var size = Math.min(W, H) - 6;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
-    var color = d3.scaleLinear()
-      .domain([-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1].map(function (f) { return f * scale; }))
-      .range(COLORS).clamp(true).interpolate(d3.interpolateRgb);
+    var step = scale / 3;
+    function color(v) { return COLORS[clamp(-3, 3, Math.round(v / step)) + 3]; }
+    var secNames = Array.from(new Set(nodes.map(function (n) { return n.sector; }))).sort();
+    function zoneColor(d) {
+      var a = d.ancestors().filter(function (x) { return x.data.kind === "sector"; })[0];
+      var i = a ? Math.max(0, secNames.indexOf(a.data.name)) : 0;
+      return SECTOR_COLORS[i % SECTOR_COLORS.length];
+    }
 
     function leaf(n) { return {name: n.ticker, kind: "leaf", d: n, value: n.mcap}; }
     var tree = {name: "All", kind: "root", children: []};
@@ -356,9 +362,19 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
     var node = svg.append("g").selectAll("g").data(root.descendants()).join("g");
     var circles = node.append("circle")
       .attr("class", function (d) { return d.depth === 0 ? "root" : (d.children ? "zone" : "leaf"); })
-      .attr("fill", function (d) { return d.children ? "#000000" : color(d.data.d.perf); })
-      .attr("stroke", function (d) { return d.depth === 0 ? "#2b2b2b" : (d.children ? "#1c1c1c" : "#000000"); })
-      .attr("stroke-width", function (d) { return d.depth === 0 ? 2 : (d.children ? 1 : 1.6); });
+      .attr("fill", function (d) {
+        if (d.depth === 0) { return "#000000"; }
+        if (!d.children) { return color(d.data.d.perf); }
+        return d3.color(zoneColor(d)).copy({opacity: d.data.kind === "sector" ? 0.14 : 0.07}).formatRgb();
+      })
+      .attr("stroke", function (d) {
+        if (d.depth === 0) { return "#2b2b2b"; }
+        if (!d.children) { return "#000000"; }
+        return d3.color(zoneColor(d)).copy({opacity: d.data.kind === "sector" ? 0.95 : 0.4}).formatRgb();
+      })
+      .attr("stroke-width", function (d) {
+        return d.depth === 0 ? 2 : (d.children ? (d.data.kind === "sector" ? 2.4 : 1.2) : 1.6);
+      });
     var leaves = node.filter(function (d) { return !d.children; });
     var zones = node.filter(function (d) { return d.children && d.depth > 0; });
     leaves.append("text").attr("class", "t").attr("text-anchor", "middle")
@@ -367,6 +383,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
       .attr("fill", "#ffffff")
       .text(function (d) { return fmtPct(d.data.d.perf); });
     zones.append("text").attr("class", "z").attr("text-anchor", "middle")
+      .style("fill", function (d) { return d3.color(zoneColor(d)).brighter(0.6).formatRgb(); })
       .text(function (d) { return d.data.name; });
 
     var focus = root;
@@ -376,7 +393,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
       node.attr("transform", function (d) { return "translate(" + ((d.x - v[0]) * k) + "," + ((d.y - v[1]) * k) + ")"; });
       circles.attr("r", function (d) { return d.r * k; })
         .attr("stroke-width", function (d) {
-          return d.depth === 0 ? 2 : (d.children ? 1 : clamp(0.6, 2, d.r * k * 0.06));
+          return d.depth === 0 ? 2 : (d.children ? (d.data.kind === "sector" ? 2.4 : 1.2) : clamp(0.6, 2, d.r * k * 0.06));
         });
       leaves.select("text.t").each(function (d) {
         var rk = d.r * k, fs = clamp(7, 18, rk * 0.42), two = rk >= 26;
@@ -839,7 +856,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles", path=str(d))
+        return components.declare_component("smz_bubbles_v2", path=str(d))
     except Exception:
         return None
 
@@ -910,7 +927,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
         return []
     c = st.columns([1.1, 1.3, 1.0, 1.6, 3.0])
     label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
-    scale = float(c[1].selectbox("Color Scale (+/- %)", [3, 5, 10, 20, 30, 50], index=2, key="bub_scale"))
+    scale = 3 * float(c[1].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step"))
     top_n = int(c[2].number_input("Max Stocks", 20, 500, 150, step=10, key="bub_top"))
     by_ind = c[3].toggle("Group by Industry", value=meta["has_industry"], disabled=not meta["has_industry"],
                          key="bub_ind")
