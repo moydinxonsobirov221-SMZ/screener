@@ -1,6 +1,6 @@
 """S.M.Z Stock Screener.
 
-Sections: 1 CONFIG | 2 DATA LAYER | 3 FILTER ENGINE | 4 UI HELPERS | 5 MARKET MAP |
+Sections: 1 CONFIG | 2 DATA LAYER | 3 FILTER ENGINE | 4 UI HELPERS | 5 MARKET MAP + BUBBLE MAP |
           6 VIEWS | 7 CHART DIALOG | 8 MAIN
 """
 from __future__ import annotations
@@ -9,6 +9,8 @@ import html
 import json
 import re
 import sqlite3
+import tempfile
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
@@ -239,6 +241,220 @@ CHART_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
   box.appendChild(s);
 })();
 </script></body></html>"""
+
+
+BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#e6e6e6}
+svg{display:block;margin:0 auto;background:#000}
+.leaf{cursor:pointer}.zone{cursor:zoom-in}.root{cursor:zoom-out}
+text.t{fill:#fff;font-weight:700;pointer-events:none}
+text.p{font-weight:600;pointer-events:none}
+text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round}
+#tip{position:fixed;pointer-events:none;display:none;background:#000;border:1px solid #2a2a2a;border-radius:6px;
+  padding:7px 10px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 8px 20px rgba(0,0,0,.9)}
+#legend{position:fixed;left:10px;bottom:8px;font-size:10px;color:#9a9a9a}
+#legend .strip{display:flex;width:280px;margin-top:3px}
+#legend .strip span{flex:1;text-align:center;color:#fff;padding:2px 0}
+#msg{position:fixed;top:45%;left:0;right:0;text-align:center;color:#9a9a9a;font-size:14px;display:none}
+</style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div>
+<script>
+(function () {
+  "use strict";
+  var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
+              "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
+              "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
+  var COLORS = ["#f63538", "#bf4045", "#8b444e", "#414554", "#35764e", "#2f9e4f", "#30cc5a"];
+  var args = null, lastKey = null, view = null, resizeTimer = null;
+
+  function post(type, extra) {
+    window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, extra || {}), "*");
+  }
+  function setHeight(h) { post("streamlit:setFrameHeight", {height: h}); }
+  function setValue(v) { post("streamlit:setComponentValue", {value: v, dataType: "json"}); }
+  function frameH() {
+    var ph = 0;
+    try { ph = window.parent.innerHeight; } catch (e) {}
+    return Math.max(560, (ph || 900) - 250);
+  }
+  function showMsg(t) {
+    var m = document.getElementById("msg");
+    m.textContent = t || ""; m.style.display = t ? "block" : "none";
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+    });
+  }
+  function fmtCap(m) { return m >= 1000 ? "$" + (m / 1000).toFixed(2) + "B" : "$" + m.toFixed(1) + "M"; }
+  function fmtPct(v) { return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
+  function clamp(a, b, v) { return Math.max(a, Math.min(b, v)); }
+
+  function loadD3(done) {
+    if (window.d3) { done(true); return; }
+    var i = 0;
+    (function next() {
+      if (i >= URLS.length) { done(false); return; }
+      var s = document.createElement("script");
+      s.src = URLS[i++]; s.onload = function () { done(true); }; s.onerror = next;
+      document.head.appendChild(s);
+    })();
+  }
+
+  function legend(scale, label) {
+    var f = [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1];
+    document.getElementById("legend").innerHTML =
+      "<div>Size: Market Cap &nbsp;|&nbsp; Border: " + esc(label) + " performance</div><div class=\"strip\">" +
+      f.map(function (x, i) {
+        var v = Math.round(x * scale);
+        return "<span style=\"background:" + COLORS[i] + "\">" + (v > 0 ? "+" : "") + v + "%</span>";
+      }).join("") + "</div>";
+  }
+
+  function draw(a, force) {
+    var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
+    var key = JSON.stringify([a.nodes, a.scale, a.by_industry, a.perf_label]) + "|" + W + "|" + H;
+    if (!force && key === lastKey) { return; }
+    lastKey = key;
+    setHeight(H);
+    build(a, W, H);
+  }
+
+  function build(a, W, H) {
+    var nodes = a.nodes || [], byInd = !!a.by_industry, scale = +a.scale || 10;
+    var svg = d3.select("#svg");
+    svg.selectAll("*").remove();
+    document.getElementById("tip").style.display = "none";
+    if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
+    showMsg("");
+    legend(scale, a.perf_label || "Today");
+    var size = Math.min(W, H) - 6;
+    svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
+
+    var color = d3.scaleLinear()
+      .domain([-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1].map(function (f) { return f * scale; }))
+      .range(COLORS).clamp(true).interpolate(d3.interpolateRgb);
+
+    function leaf(n) { return {name: n.ticker, kind: "leaf", d: n, value: n.mcap}; }
+    var tree = {name: "All", kind: "root", children: []};
+    d3.group(nodes, function (n) { return n.sector; }).forEach(function (arr, sec) {
+      var s = {name: sec, kind: "sector", children: []};
+      if (byInd) {
+        d3.group(arr, function (n) { return n.industry; }).forEach(function (a2, ind) {
+          s.children.push({name: ind, kind: "industry", children: a2.map(leaf)});
+        });
+      } else { s.children = arr.map(leaf); }
+      tree.children.push(s);
+    });
+    var root = d3.hierarchy(tree)
+      .sum(function (d) { return d.kind === "leaf" ? d.value : 0; })
+      .sort(function (x, y) { return y.value - x.value; });
+    d3.pack().size([size, size]).padding(function (d) {
+      return d.depth === 0 ? 10 : (d.data.kind === "sector" ? (byInd ? 16 : 18) : 4);
+    })(root);
+
+    var node = svg.append("g").selectAll("g").data(root.descendants()).join("g");
+    var circles = node.append("circle")
+      .attr("class", function (d) { return d.depth === 0 ? "root" : (d.children ? "zone" : "leaf"); })
+      .attr("fill", "#000000")
+      .attr("stroke", function (d) { return d.depth === 0 ? "#2b2b2b" : (d.children ? "#1c1c1c" : color(d.data.d.perf)); })
+      .attr("stroke-width", function (d) { return d.depth === 0 ? 2 : (d.children ? 1 : 2.4); });
+    var leaves = node.filter(function (d) { return !d.children; });
+    var zones = node.filter(function (d) { return d.children && d.depth > 0; });
+    leaves.append("text").attr("class", "t").attr("text-anchor", "middle")
+      .text(function (d) { return d.data.name; });
+    leaves.append("text").attr("class", "p").attr("text-anchor", "middle")
+      .attr("fill", function (d) { return color(d.data.d.perf); })
+      .text(function (d) { return fmtPct(d.data.d.perf); });
+    zones.append("text").attr("class", "z").attr("text-anchor", "middle")
+      .text(function (d) { return d.data.name; });
+
+    var focus = root;
+    function zoomTo(v) {
+      view = v;
+      var k = size / v[2];
+      node.attr("transform", function (d) { return "translate(" + ((d.x - v[0]) * k) + "," + ((d.y - v[1]) * k) + ")"; });
+      circles.attr("r", function (d) { return d.r * k; })
+        .attr("stroke-width", function (d) {
+          return d.depth === 0 ? 2 : (d.children ? 1 : clamp(0.9, 3, d.r * k * 0.18));
+        });
+      leaves.select("text.t").each(function (d) {
+        var rk = d.r * k, fs = clamp(7, 18, rk * 0.42), two = rk >= 26;
+        d3.select(this).style("display", rk >= 14 ? null : "none").attr("font-size", fs).attr("y", two ? -fs * 0.1 : fs * 0.35);
+      });
+      leaves.select("text.p").each(function (d) {
+        var rk = d.r * k, fs = clamp(7, 13, rk * 0.3);
+        d3.select(this).style("display", rk >= 26 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
+      });
+      zones.select("text.z").each(function (d) {
+        var rk = d.r * k, fs = clamp(9, 20, rk * (d.data.kind === "sector" ? 0.085 : 0.07));
+        d3.select(this).style("display", rk > (d.data.kind === "sector" ? 40 : 75) ? null : "none")
+          .attr("font-size", fs).attr("y", -rk + fs + 3);
+      });
+    }
+    function zoom(d) {
+      focus = d;
+      svg.transition().duration(650).tween("zoom", function () {
+        var i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
+        return function (t) { zoomTo(i(t)); };
+      });
+    }
+    zoomTo([root.x, root.y, root.r * 2]);
+
+    var tip = document.getElementById("tip");
+    function tipHtml(d) {
+      if (d.children) {
+        var n = d.leaves().length;
+        return "<b>" + esc(d.data.name) + "</b><br>" + n + " stocks<br>Market Cap " + fmtCap(d.value);
+      }
+      var x = d.data.d;
+      return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(x.sector) + (byInd ? " &rsaquo; " + esc(x.industry) : "") +
+        "<br>Market Cap " + fmtCap(x.mcap) + "<br>" + esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + "\">" +
+        fmtPct(x.perf) + "</span><br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
+    }
+    circles.on("mouseover", function (ev, d) {
+        if (d.depth === 0) { return; }
+        tip.innerHTML = tipHtml(d); tip.style.display = "block";
+        if (!d.children) { d3.select(this).attr("stroke-width", 3.6); }
+      })
+      .on("mousemove", function (ev) {
+        var x = ev.clientX + 14, y = ev.clientY + 14;
+        if (x + 230 > window.innerWidth) { x = ev.clientX - 240; }
+        if (y + 110 > window.innerHeight) { y = ev.clientY - 110; }
+        tip.style.left = Math.max(2, x) + "px"; tip.style.top = Math.max(2, y) + "px";
+      })
+      .on("mouseout", function (ev, d) {
+        tip.style.display = "none";
+        if (!d.children && view) { d3.select(this).attr("stroke-width", clamp(0.9, 3, d.r * (size / view[2]) * 0.18)); }
+      })
+      .on("click", function (ev, d) {
+        ev.stopPropagation();
+        if (d.depth === 0) { zoom(root); return; }
+        if (!d.children) { setValue({ticker: d.data.name, n: Date.now() + Math.random()}); return; }
+        zoom(focus === d ? (d.parent || root) : d);
+      });
+    svg.on("click", function () { zoom(root); });
+  }
+
+  window.addEventListener("message", function (e) {
+    if (!e.data || e.data.type !== "streamlit:render") { return; }
+    args = e.data.args || {};
+    setHeight(frameH());
+    loadD3(function (ok) {
+      if (!ok) { showMsg("The map library could not load. Check your connection."); return; }
+      draw(args, false);
+    });
+  });
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (args && window.d3) { draw(args, true); } }, 250);
+  });
+  post("streamlit:componentReady", {apiVersion: 1});
+})();
+</script></body></html>"""
+
+
+PERF_COLS = {"Today": "chg", "Week": "pw", "Month": "pm", "Quarter": "pq"}
 
 
 # =============================================================================
@@ -599,6 +815,47 @@ def build_treemap(df: pd.DataFrame, size_col: str, scale: float, top_n: int, by_
     return fig
 
 
+def _component_dir() -> Optional[Path]:
+    """Write the map page to a folder (next to the app, or the temp dir) and return the folder."""
+    for base in (Path(__file__).resolve().parent, Path(tempfile.gettempdir())):
+        try:
+            d = base / "_smz_bubbles"
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / "index.html"
+            if not f.exists() or f.read_text(encoding="utf-8") != BUBBLE_HTML:
+                f.write_text(BUBBLE_HTML, encoding="utf-8")
+            return d
+        except Exception:
+            continue
+    return None
+
+
+@st.cache_resource(show_spinner=False)
+def get_bubble_component():
+    """Interactive circle-packing map (D3). Returns the component callable, or None if unavailable."""
+    if components is None:
+        return None
+    d = _component_dir()
+    if d is None:
+        return None
+    try:
+        return components.declare_component("smz_bubbles", path=str(d))
+    except Exception:
+        return None
+
+
+def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_industry: bool) -> dict:
+    """Rows for the bubble map: only stocks with a market cap, biggest first."""
+    d = day.dropna(subset=["mcap", perf_col])
+    d = d[d["mcap"] > 0].sort_values("mcap", ascending=False).head(top_n)
+    nodes = [dict(ticker=str(r["ticker"]),
+                  sector=str(r["sector"]) if pd.notna(r["sector"]) else "Other",
+                  industry=str(r["industry"]) if pd.notna(r["industry"]) else "Other",
+                  mcap=float(r["mcap"]), perf=float(r[perf_col]), price=float(r["close"]),
+                  volume=float(r["volume"])) for _, r in d.iterrows()]
+    return {"nodes": nodes, "by_industry": bool(by_industry)}
+
+
 # =============================================================================
 # 6. VIEWS
 # =============================================================================
@@ -644,6 +901,34 @@ def view_overview(day: pd.DataFrame, meta: dict) -> list:
             show = to_display(sub, MINI_COLS)
             items.append(render_table(show, f"mini_{i}", 36 + 24 * len(show) + 4))
     return items
+
+
+def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
+    """Bubble map: one big circle > sectors > industries > companies. Size = market cap, border = performance."""
+    if not meta["has_fund"]:
+        st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
+        return []
+    c = st.columns([1.1, 1.3, 1.0, 1.6, 3.0])
+    label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
+    scale = float(c[1].selectbox("Color Scale (+/- %)", [3, 5, 10, 20, 30, 50], index=2, key="bub_scale"))
+    top_n = int(c[2].number_input("Max Stocks", 20, 500, 150, step=10, key="bub_top"))
+    by_ind = c[3].toggle("Group by Industry", value=meta["has_industry"], disabled=not meta["has_industry"],
+                         key="bub_ind")
+    perf_col = PERF_COLS[label]
+    payload = build_bubble_payload(day, perf_col, top_n, bool(by_ind) and meta["has_industry"])
+    hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
+    c[4].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else ""))
+    comp = get_bubble_component()
+    if comp is None:
+        st.warning("The interactive map is not available in this environment.")
+        return []
+    ev = comp(nodes=payload["nodes"], by_industry=payload["by_industry"], scale=scale, perf_label=label,
+              key="smz_bubbles", default=None)
+    if isinstance(ev, dict) and ev.get("ticker"):
+        sym = clean_symbol(str(ev["ticker"]))
+        if sym:
+            return [(f"bubbles:{ev.get('n')}", sym)]
+    return []
 
 
 def _sel(col, label, options, key, disabled=False):
@@ -751,7 +1036,7 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
 # =============================================================================
 def header(dates: list) -> tuple[str, Optional[str]]:
     c = st.columns([1.6, 1.0, 3.4])
-    opts = ["Overview", "Screener"]
+    opts = ["Overview", "Screener", "Bubbles"]
     with c[0]:
         if hasattr(st, "segmented_control"):
             view = st.segmented_control("View", opts, default="Overview", key="view", label_visibility="collapsed")
@@ -781,7 +1066,12 @@ def main() -> None:
 
     view, forced = header(dates)
     day = p[p["date"] == S["date"]]
-    items = view_overview(day, meta) if view == "Overview" else view_screener(day, meta)
+    if view == "Overview":
+        items = view_overview(day, meta)
+    elif view == "Bubbles":
+        items = view_bubbles(day, meta)
+    else:
+        items = view_screener(day, meta)
 
     to_open, S["opened"] = decide_open(items, S.get("opened"), forced)
     st.caption(f"© {BRAND} | For informational purposes only.")
@@ -858,5 +1148,7 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
         chart_widget(full_sym, 700, 170)
 
     _dialog()
+
+
 if __name__ == "__main__":
     main()
