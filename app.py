@@ -246,18 +246,23 @@ CHART_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#e6e6e6}
-svg{display:block;margin:0 auto;background:#000}
+svg{display:block;margin:0 auto;background:#000;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .leaf{cursor:pointer}
 text.t{fill:#fff;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2.5px;stroke-linejoin:round}
 text.p{fill:#fff;font-weight:600;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px;stroke-linejoin:round}
-text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
+text.ring{fill:#fff;font-weight:700;pointer-events:none}
+text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #tip{position:fixed;pointer-events:none;display:none;background:#000;border:1px solid #2a2a2a;border-radius:6px;
   padding:7px 10px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 8px 20px rgba(0,0,0,.9)}
 #legend{position:fixed;left:10px;bottom:8px;font-size:10px;color:#9a9a9a}
 #legend .strip{display:flex;width:470px;margin-top:3px}
 #legend .strip span{flex:1;text-align:center;padding:3px 0}
 #msg{position:fixed;top:45%;left:0;right:0;text-align:center;color:#9a9a9a;font-size:14px;display:none}
+#snd{position:fixed;top:8px;right:12px;background:#000;border:1px solid #333;color:#cfd6e0;border-radius:6px;
+  font-size:12px;padding:3px 9px;cursor:pointer;z-index:11}
+#snd:hover{border-color:#777}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div>
+<button id="snd" title="Dial sound on/off">&#9835; sound on</button>
 <script>
 (function () {
   "use strict";
@@ -265,8 +270,10 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
   var GREEN = ["#34b560", "#1e8f45", "#0f6b30"], RED = ["#e0434f", "#c0242f", "#8f1420"];
-  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4;
+  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4, CLICK_DEG = 3.6;
   var args = null, lastKey = null, resizeTimer = null;
+  var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
+  var audio = null, muted = false, lastClickT = 0;
 
   function post(type, extra) {
     window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, extra || {}), "*");
@@ -276,7 +283,7 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
   function frameH() {
     var ph = 0;
     try { ph = window.parent.innerHeight; } catch (e) {}
-    return Math.max(640, (ph || 900) - 190);
+    return Math.max(820, (ph || 900) - 120);
   }
   function showMsg(t) {
     var m = document.getElementById("msg");
@@ -302,17 +309,41 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
     })();
   }
 
+  /* ---- soft dial "tik" sound (Web Audio, no files needed) ---- */
+  function ensureAudio() {
+    if (!audio) {
+      try { var AC = window.AudioContext || window.webkitAudioContext; audio = AC ? new AC() : null; } catch (e) { audio = null; }
+    }
+    if (audio && audio.state === "suspended") { try { audio.resume(); } catch (e) {} }
+  }
+  function tik() {
+    if (!audio || muted) { return; }
+    var now = audio.currentTime;
+    if (now - lastClickT < 0.016) { return; }
+    lastClickT = now;
+    var len = Math.floor(audio.sampleRate * 0.005), buf = audio.createBuffer(1, len, audio.sampleRate);
+    var data = buf.getChannelData(0), i;
+    for (i = 0; i < len; i++) { data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+    var src = audio.createBufferSource(); src.buffer = buf;
+    var bp = audio.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1700 + Math.random() * 700; bp.Q.value = 1.1;
+    var g = audio.createGain(); g.gain.value = 0.45;
+    src.connect(bp); bp.connect(g); g.connect(audio.destination); src.start(now);
+    var o = audio.createOscillator(), og = audio.createGain();
+    o.type = "sine"; o.frequency.value = 520 + Math.random() * 60;
+    og.gain.setValueAtTime(0.05, now); og.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+    o.connect(og); og.connect(audio.destination); o.start(now); o.stop(now + 0.03);
+  }
+
   function legend(step, label) {
     var s = +step, f = function (v) { return +v.toFixed(2); };
     var items = [[RED[2], "\u2264 -" + f(2 * s) + "%"], [RED[1], "-" + f(s) + " .. -" + f(2 * s) + "%"],
       [RED[0], "0 .. -" + f(s) + "%"], [GREEN[0], "0 .. +" + f(s) + "%"],
       [GREEN[1], "+" + f(s) + " .. +" + f(2 * s) + "%"], [GREEN[2], "\u2265 +" + f(2 * s) + "%"]];
     document.getElementById("legend").innerHTML =
-      "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance</div><div class=\"strip\">" +
+      "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance &nbsp;|&nbsp; drag to turn the dial</div><div class=\"strip\">" +
       items.map(function (it) { return "<span style=\"background:" + it[0] + ";color:#fff\">" + it[1] + "</span>"; }).join("") + "</div>";
   }
 
-  /* angle (radians) of every sector; proportional to its share, kept between a min and a max size */
   function allocAngles(areas) {
     var n = areas.length, tot = 2 * Math.PI, amin = Math.min(0.3, tot / n), amax = Math.max(2.9, tot / n);
     var fixed = areas.map(function () { return null; }), ang = [];
@@ -332,7 +363,6 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
     return ang.map(function (a) { return a * tot / sum; });
   }
 
-  /* keep every bubble inside its own wedge and inside the big circle */
   function project(g, R) {
     var its = g.items, i, d, dist, f, m, d0, d1;
     var n0x = -Math.sin(g.a0), n0y = Math.cos(g.a0), n1x = Math.sin(g.a1), n1y = -Math.cos(g.a1);
@@ -371,6 +401,19 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
     return bad;
   }
 
+  function splitName(nm) {
+    var w = nm.split(" ");
+    if (w.length < 2) { return [nm]; }
+    var best = null, i;
+    for (i = 1; i < w.length; i++) {
+      var a = w.slice(0, i).join(" "), b = w.slice(i).join(" "), m = Math.max(a.length, b.length);
+      if (!best || m < best.m) { best = {a: a, b: b, m: m}; }
+    }
+    return [best.a, best.b];
+  }
+
+  function stopInertia() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
+
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
     var key = JSON.stringify([a.nodes, a.scale, a.perf_label]) + "|" + W + "|" + H;
@@ -383,13 +426,16 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
   function build(a, W, H) {
     var nodes = a.nodes || [], scale = +a.scale || 15, step = scale / 3;
     var svg = d3.select("#svg");
-    svg.on(".zoom", null);
+    svg.on(".drag", null);
     svg.selectAll("*").remove();
+    stopInertia();
     document.getElementById("tip").style.display = "none";
     if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
     showMsg("");
     legend(step, a.perf_label || "Today");
-    var size = Math.min(W, H) - 6, R = size / 2 - 54, R2 = R + 38;
+
+    var half = Math.min(W, H) / 2;
+    var Rw = clamp(72, 110, half * 0.27), R3 = half - 14, R = R3 - Rw, nb = Rw - 52, R2 = R + nb;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
@@ -421,64 +467,138 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
     } while (bad > 1.5 && tries < 10);
 
     var defs = svg.append("defs");
-    var zg = svg.append("g");
-    zg.append("circle").attr("r", R2).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.55)
-      .attr("stroke-width", 1).style("vector-effect", "non-scaling-stroke");
-    zg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff")
-      .attr("stroke-width", 2.2).style("vector-effect", "non-scaling-stroke");
+    var rg = svg.append("g");          /* the whole dial: everything inside turns together */
+    var NS = "vector-effect";
 
+    /* ---- tick scale (every ~1 mm, like a safe dial) ---- */
+    var nT = 500, stp = 2 * Math.PI / nT, minorP = "", midP = "", majP = "", i;
+    for (i = 0; i < nT; i++) {
+      var an = -Math.PI / 2 + i * stp, c = Math.cos(an), s = Math.sin(an);
+      var len = i % 50 === 0 ? 18 : (i % 5 === 0 ? 12 : 7);
+      var seg = "M" + (R3 * c).toFixed(1) + " " + (R3 * s).toFixed(1) + "L" + ((R3 - len) * c).toFixed(1) + " " + ((R3 - len) * s).toFixed(1);
+      if (i % 50 === 0) { majP += seg; } else if (i % 5 === 0) { midP += seg; } else { minorP += seg; }
+      if (i % 50 === 0) {
+        var deg = an * 180 / Math.PI + 90, rn = R3 - 31;
+        rg.append("text").attr("class", "num").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+          .attr("font-size", clamp(9, 13, Rw * 0.12))
+          .attr("transform", "translate(" + (rn * c).toFixed(1) + "," + (rn * s).toFixed(1) + ") rotate(" + deg.toFixed(1) + ")")
+          .text(String(i / 50 * 10));
+      }
+    }
+    rg.append("circle").attr("r", R3).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 1.2).style(NS, "non-scaling-stroke");
+    [[minorP, 0.8, 0.55], [midP, 1.1, 0.85], [majP, 1.8, 1]].forEach(function (t) {
+      rg.append("path").attr("d", t[0]).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-width", t[1])
+        .attr("stroke-opacity", t[2]).style(NS, "non-scaling-stroke");
+    });
+    rg.append("circle").attr("r", R2).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.6)
+      .attr("stroke-width", 1).style(NS, "non-scaling-stroke");
+    rg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff")
+      .attr("stroke-width", 2.2).style(NS, "non-scaling-stroke");
+
+    /* ---- bubbles ---- */
     var all = [];
     groups.forEach(function (g) { g.items.forEach(function (it) { it.sector = g.name; all.push(it); }); });
-    var leaf = zg.append("g").selectAll("g").data(all).join("g")
+    var leaf = rg.append("g").selectAll("g").data(all).join("g")
       .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
     var circles = leaf.append("circle").attr("class", "leaf").attr("r", function (d) { return d.r; })
       .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.5)
-      .style("vector-effect", "non-scaling-stroke");
-    var tickers = leaf.append("text").attr("class", "t").attr("text-anchor", "middle")
+      .style(NS, "non-scaling-stroke");
+    var labs = leaf.append("g");       /* turned back so the text always stays upright */
+    var tickers = labs.append("text").attr("class", "t").attr("text-anchor", "middle")
       .text(function (d) { return d.d.ticker; });
-    var pcts = leaf.append("text").attr("class", "p").attr("text-anchor", "middle")
+    var pcts = labs.append("text").attr("class", "p").attr("text-anchor", "middle")
       .text(function (d) { return fmtPct(d.d.perf); });
+    tickers.each(function (d) {
+      var rk = d.r, fs = clamp(7, 18, rk * 0.42);
+      d3.select(this).style("display", rk >= 13 ? null : "none").attr("font-size", fs).attr("y", rk >= 24 ? -fs * 0.1 : fs * 0.35);
+    });
+    pcts.each(function (d) {
+      var rk = d.r, fs = clamp(7, 13, rk * 0.3);
+      d3.select(this).style("display", rk >= 24 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
+    });
 
+    /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
     if (n > 1) {
       groups.forEach(function (g) {
-        zg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", (R2 + 12) * Math.cos(g.a0)).attr("y2", (R2 + 12) * Math.sin(g.a0))
-          .attr("stroke", "#ffffff").attr("stroke-opacity", 0.6).attr("stroke-width", 0.8).style("vector-effect", "non-scaling-stroke");
+        rg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", R2 * Math.cos(g.a0)).attr("y2", R2 * Math.sin(g.a0))
+          .attr("stroke", "#ffffff").attr("stroke-opacity", 0.6).attr("stroke-width", 0.8).style(NS, "non-scaling-stroke");
       });
     }
 
+    /* ---- sector names: up to 2 rows, always inside their own wedge ---- */
+    var cv = document.createElement("canvas").getContext("2d");
+    var rc1 = R + nb * 0.3, rc2 = R + nb * 0.72, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
-      var m = g.am, top = Math.sin(m) < 0, h = clamp(0.5, 1.1, (g.a1 - g.a0) / 2 + 0.3);
-      var rb = top ? R + 14.5 : R + 23.5;
-      var P = function (an) { return (rb * Math.cos(an)).toFixed(2) + " " + (rb * Math.sin(an)).toFixed(2); };
-      var dd = top ? "M " + P(m - h) + " A " + rb + " " + rb + " 0 0 1 " + P(m + h)
-                   : "M " + P(m + h) + " A " + rb + " " + rb + " 0 0 0 " + P(m - h);
-      var id = "ringp" + idx;
-      defs.append("path").attr("id", id).attr("d", dd);
-      var arcLen = (g.a1 - g.a0) * (R + 19), fs = clamp(8, 13, arcLen / (g.name.length * 0.66));
-      zg.append("text").attr("class", "ring").attr("font-size", fs)
-        .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle")
-        .text(g.name);
+      var m = g.am, top = Math.sin(m) < 0, lines = splitName(g.name);
+      var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
+      lines.forEach(function (txt, li) {
+        var rc = lines.length === 1 ? rc0 : (top ? (li === 0 ? rc2 : rc1) : (li === 0 ? rc1 : rc2));
+        cv.font = "700 12px Arial";
+        var w12 = cv.measureText(txt).width;
+        var avail = 2 * hh * rc * 0.94;
+        var fs = clamp(5.5, 12, 12 * avail / Math.max(1, w12));
+        var rb = top ? rc - fs * 0.35 : rc + fs * 0.35;
+        var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
+        var dd = top ? "M " + P(m - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(m + hh)
+                     : "M " + P(m + hh) + " A " + rb + " " + rb + " 0 0 0 " + P(m - hh);
+        var id = "ringp" + idx + "_" + li;
+        defs.append("path").attr("id", id).attr("d", dd);
+        rg.append("text").attr("class", "ring").attr("font-size", fs)
+          .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle").text(txt);
+      });
     });
 
-    function labels(kz) {
-      tickers.each(function (d) {
-        var rk = d.r * kz, fs = clamp(7, 18, rk * 0.42);
-        d3.select(this).style("display", rk >= 13 ? null : "none").style("stroke-width", (2.5 / kz) + "px")
-          .attr("font-size", fs / kz).attr("y", (rk >= 24 ? -fs * 0.1 : fs * 0.35) / kz);
-      });
-      pcts.each(function (d) {
-        var rk = d.r * kz, fs = clamp(7, 13, rk * 0.3);
-        d3.select(this).style("display", rk >= 24 ? null : "none").style("stroke-width", (2 / kz) + "px")
-          .attr("font-size", fs / kz).attr("y", (fs * 1.05 + clamp(0, 6, rk * 0.08)) / kz);
-      });
+    /* ---- fixed index mark at the top (does not turn), like on a safe dial ---- */
+    svg.append("path").attr("d", "M -7 " + (-R3 - 9) + " L 7 " + (-R3 - 9) + " L 0 " + (-R3 + 8) + " Z")
+      .attr("fill", "#ffffff").attr("pointer-events", "none");
+
+    /* ---- turning the dial ---- */
+    applyRot = function (deg) {
+      rg.attr("transform", "rotate(" + deg.toFixed(2) + ")");
+      labs.attr("transform", "rotate(" + (-deg).toFixed(2) + ")");
+    };
+    function setRot(deg) {
+      rot = deg;
+      applyRot(rot);
+      var st = Math.floor(rot / CLICK_DEG);
+      if (st !== lastStep) { lastStep = st; tik(); }
     }
-    labels(1);
+    lastStep = Math.floor(rot / CLICK_DEG);
+    applyRot(rot);
 
-    var zoom = d3.zoom().scaleExtent([1, 16]).on("zoom", function (ev) {
-      zg.attr("transform", ev.transform); labels(ev.transform.k);
-    });
-    svg.call(zoom).on("dblclick.zoom", null);
-    svg.on("click", function () { svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity); });
+    function angAt(ev) { var p = d3.pointer(ev, svg.node()); return Math.atan2(p[1], p[0]); }
+    var dragA = 0, lastMoveT = 0;
+    function startInertia() {
+      var last = performance.now();
+      (function stepFn(now) {
+        var dt = Math.min(0.05, (now - last) / 1000); last = now;
+        setRot(rot + vel * dt);
+        vel *= Math.exp(-2.4 * dt);
+        if (Math.abs(vel) < 6) { raf = null; return; }
+        raf = requestAnimationFrame(stepFn);
+      })(last);
+    }
+    svg.call(d3.drag().clickDistance(4)
+      .on("start", function (ev) {
+        ensureAudio(); stopInertia(); dragA = angAt(ev); vel = 0; lastMoveT = performance.now();
+        svg.style("cursor", "grabbing");
+      })
+      .on("drag", function (ev) {
+        var q = angAt(ev), d = q - dragA;
+        while (d > Math.PI) { d -= 2 * Math.PI; }
+        while (d < -Math.PI) { d += 2 * Math.PI; }
+        dragA = q;
+        var now = performance.now(), dt = Math.max(1, now - lastMoveT) / 1000; lastMoveT = now;
+        var dd = d * 180 / Math.PI;
+        setRot(rot + dd);
+        vel = 0.6 * vel + 0.4 * (dd / dt);
+        document.getElementById("tip").style.display = "none";
+      })
+      .on("end", function () {
+        svg.style("cursor", "grab");
+        if (Math.abs(vel) > 25 && performance.now() - lastMoveT < 90) { startInertia(); }
+      }));
 
     var tip = document.getElementById("tip");
     function tipHtml(d) {
@@ -508,6 +628,10 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
       });
   }
 
+  document.getElementById("snd").addEventListener("click", function () {
+    muted = !muted; ensureAudio();
+    this.innerHTML = "&#9835; sound " + (muted ? "off" : "on");
+  });
   window.addEventListener("message", function (e) {
     if (!e.data || e.data.type !== "streamlit:render") { return; }
     args = e.data.args || {};
@@ -911,7 +1035,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v4", path=str(d))
+        return components.declare_component("smz_bubbles_v5", path=str(d))
     except Exception:
         return None
 
@@ -989,7 +1113,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     payload = build_bubble_payload(day, perf_col, top_n, False)
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
     c[3].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
-                 + " | scroll to zoom, click empty space to reset, click a bubble to open its chart")
+                 + " | drag the dial to turn it, click a bubble to open its chart")
     comp = get_bubble_component()
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
