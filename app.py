@@ -247,15 +247,15 @@ BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
 html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#e6e6e6}
 svg{display:block;margin:0 auto;background:#000}
-.leaf{cursor:pointer}.zone{cursor:zoom-in}.root{cursor:zoom-out}
+.leaf{cursor:pointer}
 text.t{fill:#fff;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2.5px;stroke-linejoin:round}
-text.p{font-weight:600;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px;stroke-linejoin:round}
-text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round}
+text.p{fill:#fff;font-weight:600;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px;stroke-linejoin:round}
+text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
 #tip{position:fixed;pointer-events:none;display:none;background:#000;border:1px solid #2a2a2a;border-radius:6px;
   padding:7px 10px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 8px 20px rgba(0,0,0,.9)}
 #legend{position:fixed;left:10px;bottom:8px;font-size:10px;color:#9a9a9a}
-#legend .strip{display:flex;width:280px;margin-top:3px}
-#legend .strip span{flex:1;text-align:center;color:#fff;padding:2px 0}
+#legend .strip{display:flex;width:470px;margin-top:3px}
+#legend .strip span{flex:1;text-align:center;padding:3px 0}
 #msg{position:fixed;top:45%;left:0;right:0;text-align:center;color:#9a9a9a;font-size:14px;display:none}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div>
 <script>
@@ -264,9 +264,9 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
   var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
-  var COLORS = ["#ff1f3d", "#c42a40", "#82303b", "#3b4150", "#2a7a4a", "#1fa85b", "#19e068"];
-  var SECTOR_COLORS = ["#4f8cff", "#ff9f43", "#b36bff", "#2ed1c4", "#ffd24a", "#ff6b9a", "#8bd45a", "#5ad1ff", "#ff7a59", "#d4b02a", "#a0a8ff"];
-  var args = null, lastKey = null, view = null, resizeTimer = null;
+  var GREEN = ["#9be7b0", "#34b560", "#00e65a"], RED = ["#ffa3ab", "#e0434f", "#ff1530"];
+  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4;
+  var args = null, lastKey = null, resizeTimer = null;
 
   function post(type, extra) {
     window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, extra || {}), "*");
@@ -276,7 +276,7 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
   function frameH() {
     var ph = 0;
     try { ph = window.parent.innerHeight; } catch (e) {}
-    return Math.max(560, (ph || 900) - 250);
+    return Math.max(640, (ph || 900) - 190);
   }
   function showMsg(t) {
     var m = document.getElementById("msg");
@@ -302,19 +302,78 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
     })();
   }
 
-  function legend(scale, label) {
-    var f = [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1];
+  function legend(step, label) {
+    var s = +step, f = function (v) { return +v.toFixed(2); };
+    var items = [[RED[2], "\u2264 -" + f(2 * s) + "%"], [RED[1], "-" + f(s) + " .. -" + f(2 * s) + "%"],
+      [RED[0], "0 .. -" + f(s) + "%"], [GREEN[0], "0 .. +" + f(s) + "%"],
+      [GREEN[1], "+" + f(s) + " .. +" + f(2 * s) + "%"], [GREEN[2], "\u2265 +" + f(2 * s) + "%"]];
     document.getElementById("legend").innerHTML =
       "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance</div><div class=\"strip\">" +
-      f.map(function (x, i) {
-        var v = Math.round(x * scale);
-        return "<span style=\"background:" + COLORS[i] + "\">" + (v > 0 ? "+" : "") + v + "%</span>";
-      }).join("") + "</div>";
+      items.map(function (it) { return "<span style=\"background:" + it[0] + ";color:#000\">" + it[1] + "</span>"; }).join("") + "</div>";
+  }
+
+  /* angle (radians) of every sector; proportional to its share, kept between a min and a max size */
+  function allocAngles(areas) {
+    var n = areas.length, tot = 2 * Math.PI, amin = Math.min(0.3, tot / n), amax = Math.max(2.9, tot / n);
+    var fixed = areas.map(function () { return null; }), ang = [];
+    for (var it = 0; it < n + 2; it++) {
+      var rem = tot, free = 0;
+      fixed.forEach(function (f, i) { if (f !== null) { rem -= f; } else { free += areas[i]; } });
+      ang = areas.map(function (a, i) { return fixed[i] !== null ? fixed[i] : (free > 0 ? rem * a / free : 0); });
+      var changed = false;
+      ang.forEach(function (a, i) {
+        if (fixed[i] === null) {
+          if (a < amin) { fixed[i] = amin; changed = true; } else if (a > amax) { fixed[i] = amax; changed = true; }
+        }
+      });
+      if (!changed) { break; }
+    }
+    var sum = ang.reduce(function (p, q) { return p + q; }, 0);
+    return ang.map(function (a) { return a * tot / sum; });
+  }
+
+  /* keep every bubble inside its own wedge and inside the big circle */
+  function project(g, R) {
+    var its = g.items, i, d, dist, f, m, d0, d1;
+    var n0x = -Math.sin(g.a0), n0y = Math.cos(g.a0), n1x = Math.sin(g.a1), n1y = -Math.cos(g.a1);
+    for (i = 0; i < its.length; i++) {
+      d = its[i];
+      if (!g.full) {
+        m = d.r + EDGE;
+        d0 = d.x * n0x + d.y * n0y; if (d0 < m) { d.x += (m - d0) * n0x; d.y += (m - d0) * n0y; }
+        d1 = d.x * n1x + d.y * n1y; if (d1 < m) { d.x += (m - d1) * n1x; d.y += (m - d1) * n1y; }
+      }
+      dist = Math.sqrt(d.x * d.x + d.y * d.y);
+      var lim = R - d.r - 3;
+      if (dist > lim && dist > 0) { f = lim / dist; d.x *= f; d.y *= f; }
+    }
+  }
+
+  function packSector(g, k, R) {
+    var its = g.items, th = (g.a1 - g.a0) / 2, m = g.am, i, j;
+    var cd = g.full ? 0 : 2 * R * Math.sin(th) / (3 * th), cx = cd * Math.cos(m), cy = cd * Math.sin(m);
+    its.forEach(function (d, idx) {
+      d.r = k * d.rho;
+      var rr = Math.sqrt(idx + 0.5) * 6, an = idx * 2.39996;
+      d.x = cx + rr * Math.cos(an); d.y = cy + rr * Math.sin(an);
+    });
+    var sim = d3.forceSimulation(its).alphaDecay(0.012).velocityDecay(0.3)
+      .force("c", d3.forceCollide(function (d) { return d.r + GAP / 2; }).strength(1).iterations(3))
+      .force("x", d3.forceX(cx).strength(0.05)).force("y", d3.forceY(cy).strength(0.05)).stop();
+    for (i = 0; i < 360; i++) { sim.tick(); project(g, R); }
+    var bad = 0;
+    for (i = 0; i < its.length; i++) {
+      for (j = i + 1; j < its.length; j++) {
+        var dx = its[i].x - its[j].x, dy = its[i].y - its[j].y;
+        bad = Math.max(bad, its[i].r + its[j].r - Math.sqrt(dx * dx + dy * dy));
+      }
+    }
+    return bad;
   }
 
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
-    var key = JSON.stringify([a.nodes, a.scale, a.by_industry, a.perf_label]) + "|" + W + "|" + H;
+    var key = JSON.stringify([a.nodes, a.scale, a.perf_label]) + "|" + W + "|" + H;
     if (!force && key === lastKey) { return; }
     lastKey = key;
     setHeight(H);
@@ -322,117 +381,116 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
   }
 
   function build(a, W, H) {
-    var nodes = a.nodes || [], byInd = !!a.by_industry, scale = +a.scale || 10;
+    var nodes = a.nodes || [], scale = +a.scale || 15, step = scale / 3;
     var svg = d3.select("#svg");
+    svg.on(".zoom", null);
     svg.selectAll("*").remove();
     document.getElementById("tip").style.display = "none";
     if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
     showMsg("");
-    legend(scale, a.perf_label || "Today");
-    var size = Math.min(W, H) - 6;
+    legend(step, a.perf_label || "Today");
+    var size = Math.min(W, H) - 6, R = size / 2 - 46, R2 = R + 38;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
-    var step = scale / 3;
-    function color(v) { return COLORS[clamp(-3, 3, Math.round(v / step)) + 3]; }
-    var secNames = Array.from(new Set(nodes.map(function (n) { return n.sector; }))).sort();
-    function zoneColor(d) {
-      var a = d.ancestors().filter(function (x) { return x.data.kind === "sector"; })[0];
-      var i = a ? Math.max(0, secNames.indexOf(a.data.name)) : 0;
-      return SECTOR_COLORS[i % SECTOR_COLORS.length];
-    }
+    function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
 
-    function leaf(n) { return {name: n.ticker, kind: "leaf", d: n, value: n.mcap}; }
-    var tree = {name: "All", kind: "root", children: []};
-    d3.group(nodes, function (n) { return n.sector; }).forEach(function (arr, sec) {
-      var s = {name: sec, kind: "sector", children: []};
-      if (byInd) {
-        d3.group(arr, function (n) { return n.industry; }).forEach(function (a2, ind) {
-          s.children.push({name: ind, kind: "industry", children: a2.map(leaf)});
-        });
-      } else { s.children = arr.map(leaf); }
-      tree.children.push(s);
+    var groups = d3.groups(nodes, function (n) { return n.sector; }).map(function (g) {
+      var items = g[1].map(function (n) { return {d: n, rho: Math.pow(n.mcap, EXP), r: 0, x: 0, y: 0}; })
+        .sort(function (p, q) { return q.rho - p.rho; });
+      return {name: g[0], items: items, S: d3.sum(items, function (it) { return it.rho * it.rho; }), rhoMax: items[0].rho};
+    }).sort(function (p, q) { return q.S - p.S; });
+    var n = groups.length;
+    var angs = allocAngles(groups.map(function (g) { return g.S; }));
+    var cur = -Math.PI / 2;
+    groups.forEach(function (g, i) {
+      g.a0 = cur; g.a1 = cur + angs[i]; g.am = (g.a0 + g.a1) / 2; g.full = n === 1; cur = g.a1;
     });
-    var root = d3.hierarchy(tree)
-      .sum(function (d) { return d.kind === "leaf" ? d.value : 0; })
-      .sort(function (x, y) { return y.value - x.value; });
-    d3.pack().size([size, size]).padding(function (d) {
-      return d.depth === 0 ? 10 : (d.data.kind === "sector" ? (byInd ? 16 : 18) : 4);
-    })(root);
 
-    var node = svg.append("g").selectAll("g").data(root.descendants()).join("g");
-    var circles = node.append("circle")
-      .attr("class", function (d) { return d.depth === 0 ? "root" : (d.children ? "zone" : "leaf"); })
-      .attr("fill", function (d) {
-        if (d.depth === 0) { return "#000000"; }
-        if (!d.children) { return color(d.data.d.perf); }
-        return d3.color(zoneColor(d)).copy({opacity: d.data.kind === "sector" ? 0.14 : 0.07}).formatRgb();
-      })
-      .attr("stroke", function (d) {
-        if (d.depth === 0) { return "#2b2b2b"; }
-        if (!d.children) { return "#000000"; }
-        return d3.color(zoneColor(d)).copy({opacity: d.data.kind === "sector" ? 0.95 : 0.4}).formatRgb();
-      })
-      .attr("stroke-width", function (d) {
-        return d.depth === 0 ? 2 : (d.children ? (d.data.kind === "sector" ? 2.4 : 1.2) : 1.6);
-      });
-    var leaves = node.filter(function (d) { return !d.children; });
-    var zones = node.filter(function (d) { return d.children && d.depth > 0; });
-    leaves.append("text").attr("class", "t").attr("text-anchor", "middle")
-      .text(function (d) { return d.data.name; });
-    leaves.append("text").attr("class", "p").attr("text-anchor", "middle")
-      .attr("fill", "#ffffff")
-      .text(function (d) { return fmtPct(d.data.d.perf); });
-    zones.append("text").attr("class", "z").attr("text-anchor", "middle")
-      .style("fill", function (d) { return d3.color(zoneColor(d)).brighter(0.6).formatRgb(); })
-      .text(function (d) { return d.data.name; });
+    var k = Infinity;
+    groups.forEach(function (g) {
+      var ang = g.a1 - g.a0, sn = Math.sin(ang / 2);
+      var rins = g.full ? R : R * sn / (1 + sn);
+      k = Math.min(k, Math.sqrt(DENS * ang * R * R / (2 * Math.PI * g.S)), 0.95 * rins / g.rhoMax);
+    });
+    var tries = 0, bad;
+    do {
+      bad = 0;
+      groups.forEach(function (g) { bad = Math.max(bad, packSector(g, k, R)); });
+      if (bad > 1.5) { k *= 0.93; }
+      tries++;
+    } while (bad > 1.5 && tries < 10);
 
-    var focus = root;
-    function zoomTo(v) {
-      view = v;
-      var k = size / v[2];
-      node.attr("transform", function (d) { return "translate(" + ((d.x - v[0]) * k) + "," + ((d.y - v[1]) * k) + ")"; });
-      circles.attr("r", function (d) { return d.r * k; })
-        .attr("stroke-width", function (d) {
-          return d.depth === 0 ? 2 : (d.children ? (d.data.kind === "sector" ? 2.4 : 1.2) : clamp(0.6, 2, d.r * k * 0.06));
-        });
-      leaves.select("text.t").each(function (d) {
-        var rk = d.r * k, fs = clamp(7, 18, rk * 0.42), two = rk >= 26;
-        d3.select(this).style("display", rk >= 14 ? null : "none").attr("font-size", fs).attr("y", two ? -fs * 0.1 : fs * 0.35);
-      });
-      leaves.select("text.p").each(function (d) {
-        var rk = d.r * k, fs = clamp(7, 13, rk * 0.3);
-        d3.select(this).style("display", rk >= 26 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
-      });
-      zones.select("text.z").each(function (d) {
-        var rk = d.r * k, fs = clamp(9, 20, rk * (d.data.kind === "sector" ? 0.085 : 0.07));
-        d3.select(this).style("display", rk > (d.data.kind === "sector" ? 40 : 75) ? null : "none")
-          .attr("font-size", fs).attr("y", -rk + fs + 3);
+    var defs = svg.append("defs");
+    var zg = svg.append("g");
+    zg.append("circle").attr("r", R2).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.55)
+      .attr("stroke-width", 1).style("vector-effect", "non-scaling-stroke");
+    zg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff")
+      .attr("stroke-width", 2.2).style("vector-effect", "non-scaling-stroke");
+
+    var all = [];
+    groups.forEach(function (g) { g.items.forEach(function (it) { it.sector = g.name; all.push(it); }); });
+    var leaf = zg.append("g").selectAll("g").data(all).join("g")
+      .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
+    var circles = leaf.append("circle").attr("class", "leaf").attr("r", function (d) { return d.r; })
+      .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.5)
+      .style("vector-effect", "non-scaling-stroke");
+    var tickers = leaf.append("text").attr("class", "t").attr("text-anchor", "middle")
+      .text(function (d) { return d.d.ticker; });
+    var pcts = leaf.append("text").attr("class", "p").attr("text-anchor", "middle")
+      .text(function (d) { return fmtPct(d.d.perf); });
+
+    if (n > 1) {
+      groups.forEach(function (g) {
+        zg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", R * Math.cos(g.a0)).attr("y2", R * Math.sin(g.a0))
+          .attr("stroke", "#ffffff").attr("stroke-width", 1.6).style("vector-effect", "non-scaling-stroke");
       });
     }
-    function zoom(d) {
-      focus = d;
-      svg.transition().duration(650).tween("zoom", function () {
-        var i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
-        return function (t) { zoomTo(i(t)); };
+
+    groups.forEach(function (g, idx) {
+      var m = g.am, top = Math.sin(m) < 0, h = clamp(0.5, 1.1, (g.a1 - g.a0) / 2 + 0.3);
+      var rb = top ? R + 14.5 : R + 23.5;
+      var P = function (an) { return (rb * Math.cos(an)).toFixed(2) + " " + (rb * Math.sin(an)).toFixed(2); };
+      var dd = top ? "M " + P(m - h) + " A " + rb + " " + rb + " 0 0 1 " + P(m + h)
+                   : "M " + P(m + h) + " A " + rb + " " + rb + " 0 0 0 " + P(m - h);
+      var id = "ringp" + idx;
+      defs.append("path").attr("id", id).attr("d", dd);
+      var arcLen = (g.a1 - g.a0) * (R + 19), fs = clamp(8, 13, arcLen / (g.name.length * 0.66));
+      zg.append("text").attr("class", "ring").attr("font-size", fs)
+        .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle")
+        .text(g.name);
+    });
+
+    function labels(kz) {
+      tickers.each(function (d) {
+        var rk = d.r * kz, fs = clamp(7, 18, rk * 0.42);
+        d3.select(this).style("display", rk >= 13 ? null : "none").style("stroke-width", (2.5 / kz) + "px")
+          .attr("font-size", fs / kz).attr("y", (rk >= 24 ? -fs * 0.1 : fs * 0.35) / kz);
+      });
+      pcts.each(function (d) {
+        var rk = d.r * kz, fs = clamp(7, 13, rk * 0.3);
+        d3.select(this).style("display", rk >= 24 ? null : "none").style("stroke-width", (2 / kz) + "px")
+          .attr("font-size", fs / kz).attr("y", (fs * 1.05 + clamp(0, 6, rk * 0.08)) / kz);
       });
     }
-    zoomTo([root.x, root.y, root.r * 2]);
+    labels(1);
+
+    var zoom = d3.zoom().scaleExtent([1, 16]).on("zoom", function (ev) {
+      zg.attr("transform", ev.transform); labels(ev.transform.k);
+    });
+    svg.call(zoom).on("dblclick.zoom", null);
+    svg.on("click", function () { svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity); });
 
     var tip = document.getElementById("tip");
     function tipHtml(d) {
-      if (d.children) {
-        var n = d.leaves().length;
-        return "<b>" + esc(d.data.name) + "</b><br>" + n + " stocks<br>Market Cap " + fmtCap(d.value);
-      }
-      var x = d.data.d;
-      return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(x.sector) + (byInd ? " &rsaquo; " + esc(x.industry) : "") +
-        "<br>Market Cap " + fmtCap(x.mcap) + "<br>" + esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + "\">" +
-        fmtPct(x.perf) + "</span><br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
+      var x = d.d;
+      return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(x.sector) + "<br>Market Cap " + fmtCap(x.mcap) + "<br>" +
+        esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + "\">" + fmtPct(x.perf) + "</span>" +
+        "<br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
     }
     circles.on("mouseover", function (ev, d) {
-        if (d.depth === 0) { return; }
         tip.innerHTML = tipHtml(d); tip.style.display = "block";
-        if (!d.children) { d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2.4); }
+        d3.select(this.parentNode).raise();
+        d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2.2);
       })
       .on("mousemove", function (ev) {
         var x = ev.clientX + 14, y = ev.clientY + 14;
@@ -440,17 +498,14 @@ text.z{fill:#cfd6e0;font-weight:700;pointer-events:none;paint-order:stroke;strok
         if (y + 110 > window.innerHeight) { y = ev.clientY - 110; }
         tip.style.left = Math.max(2, x) + "px"; tip.style.top = Math.max(2, y) + "px";
       })
-      .on("mouseout", function (ev, d) {
+      .on("mouseout", function () {
         tip.style.display = "none";
-        if (!d.children && view) { d3.select(this).attr("stroke", "#000000").attr("stroke-width", clamp(0.6, 2, d.r * (size / view[2]) * 0.06)); }
+        d3.select(this).attr("stroke", "#000000").attr("stroke-width", 1.5);
       })
       .on("click", function (ev, d) {
         ev.stopPropagation();
-        if (d.depth === 0) { zoom(root); return; }
-        if (!d.children) { setValue({ticker: d.data.name, n: Date.now() + Math.random()}); return; }
-        zoom(focus === d ? (d.parent || root) : d);
+        setValue({ticker: d.d.ticker, n: Date.now() + Math.random()});
       });
-    svg.on("click", function () { zoom(root); });
   }
 
   window.addEventListener("message", function (e) {
@@ -856,7 +911,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v2", path=str(d))
+        return components.declare_component("smz_bubbles_v3", path=str(d))
     except Exception:
         return None
 
@@ -921,26 +976,25 @@ def view_overview(day: pd.DataFrame, meta: dict) -> list:
 
 
 def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
-    """Bubble map: one big circle > sectors > industries > companies. Size = market cap, fill = performance."""
+    """Radial bubble map: white circle split into sector wedges, company bubbles sized by market cap
+    and colored by performance (green/red, 5% steps)."""
     if not meta["has_fund"]:
         st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
         return []
-    c = st.columns([1.1, 1.3, 1.0, 1.6, 3.0])
+    c = st.columns([1.1, 1.3, 1.0, 4.6])
     label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
     scale = 3 * float(c[1].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step"))
     top_n = int(c[2].number_input("Max Stocks", 20, 500, 150, step=10, key="bub_top"))
-    by_ind = c[3].toggle("Group by Industry", value=meta["has_industry"], disabled=not meta["has_industry"],
-                         key="bub_ind")
     perf_col = PERF_COLS[label]
-    payload = build_bubble_payload(day, perf_col, top_n, bool(by_ind) and meta["has_industry"])
+    payload = build_bubble_payload(day, perf_col, top_n, False)
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
-    c[4].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else ""))
+    c[3].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
+                 + " | scroll to zoom, click empty space to reset, click a bubble to open its chart")
     comp = get_bubble_component()
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
         return []
-    ev = comp(nodes=payload["nodes"], by_industry=payload["by_industry"], scale=scale, perf_label=label,
-              key="smz_bubbles", default=None)
+    ev = comp(nodes=payload["nodes"], scale=scale, perf_label=label, key="smz_bubbles", default=None)
     if isinstance(ev, dict) and ev.get("ticker"):
         sym = clean_symbol(str(ev["ticker"]))
         if sym:
