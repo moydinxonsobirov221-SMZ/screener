@@ -264,7 +264,7 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
   var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
-  var GREEN = ["#9be7b0", "#34b560", "#00e65a"], RED = ["#ffa3ab", "#e0434f", "#ff1530"];
+  var GREEN = ["#34b560", "#1e8f45", "#0f6b30"], RED = ["#e0434f", "#c0242f", "#8f1420"];
   var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4;
   var args = null, lastKey = null, resizeTimer = null;
 
@@ -309,7 +309,7 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
       [GREEN[1], "+" + f(s) + " .. +" + f(2 * s) + "%"], [GREEN[2], "\u2265 +" + f(2 * s) + "%"]];
     document.getElementById("legend").innerHTML =
       "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance</div><div class=\"strip\">" +
-      items.map(function (it) { return "<span style=\"background:" + it[0] + ";color:#000\">" + it[1] + "</span>"; }).join("") + "</div>";
+      items.map(function (it) { return "<span style=\"background:" + it[0] + ";color:#fff\">" + it[1] + "</span>"; }).join("") + "</div>";
   }
 
   /* angle (radians) of every sector; proportional to its share, kept between a min and a max size */
@@ -389,7 +389,7 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
     if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
     showMsg("");
     legend(step, a.perf_label || "Today");
-    var size = Math.min(W, H) - 6, R = size / 2 - 46, R2 = R + 38;
+    var size = Math.min(W, H) - 6, R = size / 2 - 54, R2 = R + 38;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
@@ -441,8 +441,8 @@ text.ring{fill:#fff;font-weight:700;letter-spacing:.6px;pointer-events:none}
 
     if (n > 1) {
       groups.forEach(function (g) {
-        zg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", R * Math.cos(g.a0)).attr("y2", R * Math.sin(g.a0))
-          .attr("stroke", "#ffffff").attr("stroke-width", 1.6).style("vector-effect", "non-scaling-stroke");
+        zg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", (R2 + 12) * Math.cos(g.a0)).attr("y2", (R2 + 12) * Math.sin(g.a0))
+          .attr("stroke", "#ffffff").attr("stroke-opacity", 0.6).attr("stroke-width", 0.8).style("vector-effect", "non-scaling-stroke");
       });
     }
 
@@ -911,7 +911,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v3", path=str(d))
+        return components.declare_component("smz_bubbles_v4", path=str(d))
     except Exception:
         return None
 
