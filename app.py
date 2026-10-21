@@ -450,7 +450,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     legend(step, a.perf_label || "Today");
 
     var half = Math.min(W, H) / 2;
-    var tb = 30, nb = clamp(42, 58, half * 0.22), Rw = tb + nb, R3 = half - 12, R = R3 - Rw, R2 = R + nb;
+    var tb = 20, nb = clamp(32, 40, half * 0.17), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
     var hubR = clamp(18, 30, R * 0.11);
     HUB = hubR;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
@@ -491,7 +491,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var nT = Math.max(250, 50 * Math.round(2 * Math.PI * R3 / (4.8 * 50))), stp = 2 * Math.PI / nT, minorP = "", midP = "", majP = "", i;
     for (i = 0; i < nT; i++) {
       var an = -Math.PI / 2 + i * stp, c = Math.cos(an), s = Math.sin(an);
-      var len = i % 50 === 0 ? 15 : (i % 5 === 0 ? 10 : 6);
+      var len = i % 50 === 0 ? 11 : (i % 5 === 0 ? 8 : 5);
       var seg = "M" + (R3 * c).toFixed(1) + " " + (R3 * s).toFixed(1) + "L" + ((R3 - len) * c).toFixed(1) + " " + ((R3 - len) * s).toFixed(1);
       if (i % 50 === 0) { majP += seg; } else if (i % 5 === 0) { midP += seg; } else { minorP += seg; }
     }
@@ -538,7 +538,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
     /* ---- sector names: up to 2 rows, always inside their own wedge ---- */
     var cv = document.createElement("canvas").getContext("2d");
-    var rc1 = R + nb * 0.3, rc2 = R + nb * 0.72, rc0 = R + nb * 0.5;
+    var rc1 = R + nb * 0.27, rc2 = R + nb * 0.74, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
       var m = g.am, top = Math.sin(m) < 0, lines = splitName(g.name);
       var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
@@ -547,7 +547,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         cv.font = "700 12px Arial";
         var w12 = cv.measureText(txt).width;
         var avail = 2 * hh * rc * 0.94;
-        var fs = clamp(5.5, 12, 12 * avail / Math.max(1, w12));
+        var fs = clamp(5.5, 10, 12 * avail / Math.max(1, w12));
         var rb = top ? rc - fs * 0.35 : rc + fs * 0.35;
         var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
         var dd = top ? "M " + P(m - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(m + hh)
@@ -1053,7 +1053,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v6", path=str(d))
+        return components.declare_component("smz_bubbles_v7", path=str(d))
     except Exception:
         return None
 
