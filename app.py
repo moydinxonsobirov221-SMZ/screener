@@ -318,8 +318,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         var AC = window.AudioContext || window.webkitAudioContext;
         audio = AC ? new AC() : null;
         if (audio) {
-          var master = audio.createGain(); master.gain.value = 0.55;
-          lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2800; lp.Q.value = 0.5;
+          var master = audio.createGain(); master.gain.value = 0.5;
+          lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1900; lp.Q.value = 0.4;
           lp.connect(master); master.connect(audio.destination);
         }
       } catch (e) { audio = null; }
@@ -333,16 +333,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.01);
   }
-  /* soft two-part "ti-riq" like a safe dial */
+  /* gentle, round two-part "ti-tok" (soft wooden dial click) */
   function tik() {
     if (!audio || muted || !lp) { return; }
     var now = audio.currentTime;
-    if (now - lastClickT < 0.03) { return; }
+    if (now - lastClickT < 0.045) { return; }
     lastClickT = now;
-    var t = now + 0.002, v = 0.96 + Math.random() * 0.08;
-    blip(t, 1450 * v, 1050 * v, 0.11, 0.016, "triangle");
-    blip(t + 0.024, 980 * v, 720 * v, 0.08, 0.02, "triangle");
-    blip(t, 210, 150, 0.05, 0.03, "sine");
+    var t = now + 0.002, v = 0.97 + Math.random() * 0.06;
+    blip(t, 900 * v, 540 * v, 0.085, 0.03, "sine");
+    blip(t + 0.032, 450 * v, 300 * v, 0.07, 0.045, "sine");
   }
 
   function legend(step, label) {
@@ -450,7 +449,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     legend(step, a.perf_label || "Today");
 
     var half = Math.min(W, H) / 2;
-    var tb = 20, nb = clamp(32, 40, half * 0.17), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
+    var tb = 20, nb = clamp(26, 30, half * 0.1), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
     var hubR = clamp(18, 30, R * 0.11);
     HUB = hubR;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
@@ -538,7 +537,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
     /* ---- sector names: up to 2 rows, always inside their own wedge ---- */
     var cv = document.createElement("canvas").getContext("2d");
-    var rc1 = R + nb * 0.27, rc2 = R + nb * 0.74, rc0 = R + nb * 0.5;
+    var rc1 = R + nb * 0.25, rc2 = R + nb * 0.76, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
       var m = g.am, top = Math.sin(m) < 0, lines = splitName(g.name);
       var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
@@ -547,7 +546,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         cv.font = "700 12px Arial";
         var w12 = cv.measureText(txt).width;
         var avail = 2 * hh * rc * 0.94;
-        var fs = clamp(5.5, 10, 12 * avail / Math.max(1, w12));
+        var fs = clamp(5, 9, 12 * avail / Math.max(1, w12));
         var rb = top ? rc - fs * 0.35 : rc + fs * 0.35;
         var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
         var dd = top ? "M " + P(m - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(m + hh)
@@ -1053,7 +1052,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v7", path=str(d))
+        return components.declare_component("smz_bubbles_v8", path=str(d))
     except Exception:
         return None
 
