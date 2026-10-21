@@ -258,11 +258,12 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #legend .strip{display:flex;width:470px;margin-top:3px}
 #legend .strip span{flex:1;text-align:center;padding:3px 0}
 #msg{position:fixed;top:45%;left:0;right:0;text-align:center;color:#9a9a9a;font-size:14px;display:none}
-#snd{position:fixed;top:8px;right:12px;background:#000;border:1px solid #333;color:#cfd6e0;border-radius:6px;
-  font-size:12px;padding:3px 9px;cursor:pointer;z-index:11}
-#snd:hover{border-color:#777}
+#snd{position:fixed;top:10px;right:14px;border:0;color:#fff;border-radius:6px;font-size:13px;font-weight:700;
+  padding:4px 12px;cursor:pointer;z-index:11;background:#1e8f45}
+#snd.off{background:#c0242f}
+#snd:hover{filter:brightness(1.15)}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div>
-<button id="snd" title="Dial sound on/off">&#9835; sound on</button>
+<button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
 (function () {
   "use strict";
@@ -270,7 +271,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
   var GREEN = ["#34b560", "#1e8f45", "#0f6b30"], RED = ["#e0434f", "#c0242f", "#8f1420"];
-  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4, CLICK_DEG = 3.6;
+  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4, CLICK_DEG = 3.6, HUB = 0;
   var args = null, lastKey = null, resizeTimer = null;
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
   var audio = null, muted = false, lastClickT = 0;
@@ -283,7 +284,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   function frameH() {
     var ph = 0;
     try { ph = window.parent.innerHeight; } catch (e) {}
-    return Math.max(820, (ph || 900) - 120);
+    return clamp(420, 920, (ph || 900) - 245);
   }
   function showMsg(t) {
     var m = document.getElementById("msg");
@@ -310,28 +311,38 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   }
 
   /* ---- soft dial "tik" sound (Web Audio, no files needed) ---- */
+  var lp = null;
   function ensureAudio() {
     if (!audio) {
-      try { var AC = window.AudioContext || window.webkitAudioContext; audio = AC ? new AC() : null; } catch (e) { audio = null; }
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        audio = AC ? new AC() : null;
+        if (audio) {
+          var master = audio.createGain(); master.gain.value = 0.55;
+          lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2800; lp.Q.value = 0.5;
+          lp.connect(master); master.connect(audio.destination);
+        }
+      } catch (e) { audio = null; }
     }
     if (audio && audio.state === "suspended") { try { audio.resume(); } catch (e) {} }
   }
+  function blip(t, f0, f1, vol, dur, type) {
+    var o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.01);
+  }
+  /* soft two-part "ti-riq" like a safe dial */
   function tik() {
-    if (!audio || muted) { return; }
+    if (!audio || muted || !lp) { return; }
     var now = audio.currentTime;
-    if (now - lastClickT < 0.016) { return; }
+    if (now - lastClickT < 0.03) { return; }
     lastClickT = now;
-    var len = Math.floor(audio.sampleRate * 0.005), buf = audio.createBuffer(1, len, audio.sampleRate);
-    var data = buf.getChannelData(0), i;
-    for (i = 0; i < len; i++) { data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
-    var src = audio.createBufferSource(); src.buffer = buf;
-    var bp = audio.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1700 + Math.random() * 700; bp.Q.value = 1.1;
-    var g = audio.createGain(); g.gain.value = 0.45;
-    src.connect(bp); bp.connect(g); g.connect(audio.destination); src.start(now);
-    var o = audio.createOscillator(), og = audio.createGain();
-    o.type = "sine"; o.frequency.value = 520 + Math.random() * 60;
-    og.gain.setValueAtTime(0.05, now); og.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
-    o.connect(og); og.connect(audio.destination); o.start(now); o.stop(now + 0.03);
+    var t = now + 0.002, v = 0.96 + Math.random() * 0.08;
+    blip(t, 1450 * v, 1050 * v, 0.11, 0.016, "triangle");
+    blip(t + 0.024, 980 * v, 720 * v, 0.08, 0.02, "triangle");
+    blip(t, 210, 150, 0.05, 0.03, "sine");
   }
 
   function legend(step, label) {
@@ -374,7 +385,11 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         d1 = d.x * n1x + d.y * n1y; if (d1 < m) { d.x += (m - d1) * n1x; d.y += (m - d1) * n1y; }
       }
       dist = Math.sqrt(d.x * d.x + d.y * d.y);
-      var lim = R - d.r - 3;
+      var lim = R - d.r - 3, lo = HUB + d.r + 4;
+      if (dist < lo) {
+        if (dist > 0.01) { f = lo / dist; d.x *= f; d.y *= f; } else { d.x = lo * Math.cos(g.am); d.y = lo * Math.sin(g.am); }
+        dist = Math.sqrt(d.x * d.x + d.y * d.y);
+      }
       if (dist > lim && dist > 0) { f = lim / dist; d.x *= f; d.y *= f; }
     }
   }
@@ -435,7 +450,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     legend(step, a.perf_label || "Today");
 
     var half = Math.min(W, H) / 2;
-    var Rw = clamp(72, 110, half * 0.27), R3 = half - 14, R = R3 - Rw, nb = Rw - 52, R2 = R + nb;
+    var tb = 30, nb = clamp(42, 58, half * 0.22), Rw = tb + nb, R3 = half - 12, R = R3 - Rw, R2 = R + nb;
+    var hubR = clamp(18, 30, R * 0.11);
+    HUB = hubR;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
@@ -471,19 +488,12 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var NS = "vector-effect";
 
     /* ---- tick scale (every ~1 mm, like a safe dial) ---- */
-    var nT = 500, stp = 2 * Math.PI / nT, minorP = "", midP = "", majP = "", i;
+    var nT = Math.max(250, 50 * Math.round(2 * Math.PI * R3 / (4.8 * 50))), stp = 2 * Math.PI / nT, minorP = "", midP = "", majP = "", i;
     for (i = 0; i < nT; i++) {
       var an = -Math.PI / 2 + i * stp, c = Math.cos(an), s = Math.sin(an);
-      var len = i % 50 === 0 ? 18 : (i % 5 === 0 ? 12 : 7);
+      var len = i % 50 === 0 ? 15 : (i % 5 === 0 ? 10 : 6);
       var seg = "M" + (R3 * c).toFixed(1) + " " + (R3 * s).toFixed(1) + "L" + ((R3 - len) * c).toFixed(1) + " " + ((R3 - len) * s).toFixed(1);
       if (i % 50 === 0) { majP += seg; } else if (i % 5 === 0) { midP += seg; } else { minorP += seg; }
-      if (i % 50 === 0) {
-        var deg = an * 180 / Math.PI + 90, rn = R3 - 31;
-        rg.append("text").attr("class", "num").attr("text-anchor", "middle").attr("dominant-baseline", "central")
-          .attr("font-size", clamp(9, 13, Rw * 0.12))
-          .attr("transform", "translate(" + (rn * c).toFixed(1) + "," + (rn * s).toFixed(1) + ") rotate(" + deg.toFixed(1) + ")")
-          .text(String(i / 50 * 10));
-      }
     }
     rg.append("circle").attr("r", R3).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.2).style(NS, "non-scaling-stroke");
@@ -521,7 +531,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
     if (n > 1) {
       groups.forEach(function (g) {
-        rg.append("line").attr("x1", 0).attr("y1", 0).attr("x2", R2 * Math.cos(g.a0)).attr("y2", R2 * Math.sin(g.a0))
+        rg.append("line").attr("x1", hubR * Math.cos(g.a0)).attr("y1", hubR * Math.sin(g.a0)).attr("x2", R2 * Math.cos(g.a0)).attr("y2", R2 * Math.sin(g.a0))
           .attr("stroke", "#ffffff").attr("stroke-opacity", 0.6).attr("stroke-width", 0.8).style(NS, "non-scaling-stroke");
       });
     }
@@ -549,8 +559,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       });
     });
 
+    /* ---- centre hub (does not turn) ---- */
+    svg.append("circle").attr("r", hubR).attr("fill", "#000000").attr("stroke", "#ffffff")
+      .attr("stroke-width", 3.2).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
+    svg.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+      .attr("font-size", hubR * 0.5).attr("font-weight", 800).attr("fill", "#ffffff").attr("letter-spacing", 0.4)
+      .attr("pointer-events", "none").text("S.M.Z");
+
     /* ---- fixed index mark at the top (does not turn), like on a safe dial ---- */
-    svg.append("path").attr("d", "M -7 " + (-R3 - 9) + " L 7 " + (-R3 - 9) + " L 0 " + (-R3 + 8) + " Z")
+    svg.append("path").attr("d", "M -6 " + (-R3 - 8) + " L 6 " + (-R3 - 8) + " L 0 " + (-R3 + 7) + " Z")
       .attr("fill", "#ffffff").attr("pointer-events", "none");
 
     /* ---- turning the dial ---- */
@@ -630,7 +647,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   document.getElementById("snd").addEventListener("click", function () {
     muted = !muted; ensureAudio();
-    this.innerHTML = "&#9835; sound " + (muted ? "off" : "on");
+    this.className = muted ? "off" : "";
+    this.innerHTML = "&#9835; " + (muted ? "OFF" : "ON");
   });
   window.addEventListener("message", function (e) {
     if (!e.data || e.data.type !== "streamlit:render") { return; }
@@ -1035,7 +1053,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v5", path=str(d))
+        return components.declare_component("smz_bubbles_v6", path=str(d))
     except Exception:
         return None
 
