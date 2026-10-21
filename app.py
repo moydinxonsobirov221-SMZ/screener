@@ -539,7 +539,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var cv = document.createElement("canvas").getContext("2d");
     var rc1 = R + nb * 0.25, rc2 = R + nb * 0.76, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
-      var m = g.am, top = Math.sin(m) < 0, lines = splitName(g.name);
+      var m = g.am, top = true, lines = splitName(g.name);   /* every name has the same orientation */
       var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
       lines.forEach(function (txt, li) {
         var rc = lines.length === 1 ? rc0 : (top ? (li === 0 ? rc2 : rc1) : (li === 0 ? rc1 : rc2));
@@ -1052,7 +1052,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v8", path=str(d))
+        return components.declare_component("smz_bubbles_v9", path=str(d))
     except Exception:
         return None
 
