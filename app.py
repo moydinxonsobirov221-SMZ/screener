@@ -271,7 +271,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
   var GREEN = ["#34b560", "#1e8f45", "#0f6b30"], RED = ["#e0434f", "#c0242f", "#8f1420"];
-  var DENS = 0.58, EXP = 0.32, GAP = 3, EDGE = 4, CLICK_DEG = 3.6, HUB = 0;
+  var EXP = 0.32, CLICK_DEG = 3.6;
   var args = null, lastKey = null, resizeTimer = null;
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
   var audio = null, muted = false, lastClickT = 0;
@@ -373,46 +373,124 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     return ang.map(function (a) { return a * tot / sum; });
   }
 
-  function project(g, R) {
-    var its = g.items, i, d, dist, f, m, d0, d1;
-    var n0x = -Math.sin(g.a0), n0y = Math.cos(g.a0), n1x = Math.sin(g.a1), n1y = -Math.cos(g.a1);
-    for (i = 0; i < its.length; i++) {
-      d = its[i];
-      if (!g.full) {
-        m = d.r + EDGE;
-        d0 = d.x * n0x + d.y * n0y; if (d0 < m) { d.x += (m - d0) * n0x; d.y += (m - d0) * n0y; }
-        d1 = d.x * n1x + d.y * n1y; if (d1 < m) { d.x += (m - d1) * n1x; d.y += (m - d1) * n1y; }
-      }
-      dist = Math.sqrt(d.x * d.x + d.y * d.y);
-      var lim = R - d.r - 3, lo = HUB + d.r + 4;
-      if (dist < lo) {
-        if (dist > 0.01) { f = lo / dist; d.x *= f; d.y *= f; } else { d.x = lo * Math.cos(g.am); d.y = lo * Math.sin(g.am); }
-        dist = Math.sqrt(d.x * d.x + d.y * d.y);
-      }
-      if (dist > lim && dist > 0) { f = lim / dist; d.x *= f; d.y *= f; }
-    }
+  /* ---------- map-like tiling: every company is a straight-edged cell (weighted Voronoi) ---------- */
+  function polyArea(p) {
+    var a = 0, n = p.length, i, q;
+    for (i = 0; i < n; i++) { q = p[(i + 1) % n]; a += p[i][0] * q[1] - q[0] * p[i][1]; }
+    return a / 2;
   }
-
-  function packSector(g, k, R) {
-    var its = g.items, th = (g.a1 - g.a0) / 2, m = g.am, i, j;
-    var cd = g.full ? 0 : 2 * R * Math.sin(th) / (3 * th), cx = cd * Math.cos(m), cy = cd * Math.sin(m);
-    its.forEach(function (d, idx) {
-      d.r = k * d.rho;
-      var rr = Math.sqrt(idx + 0.5) * 6, an = idx * 2.39996;
-      d.x = cx + rr * Math.cos(an); d.y = cy + rr * Math.sin(an);
-    });
-    var sim = d3.forceSimulation(its).alphaDecay(0.012).velocityDecay(0.3)
-      .force("c", d3.forceCollide(function (d) { return d.r + GAP / 2; }).strength(1).iterations(3))
-      .force("x", d3.forceX(cx).strength(0.05)).force("y", d3.forceY(cy).strength(0.05)).stop();
-    for (i = 0; i < 360; i++) { sim.tick(); project(g, R); }
-    var bad = 0;
-    for (i = 0; i < its.length; i++) {
-      for (j = i + 1; j < its.length; j++) {
-        var dx = its[i].x - its[j].x, dy = its[i].y - its[j].y;
-        bad = Math.max(bad, its[i].r + its[j].r - Math.sqrt(dx * dx + dy * dy));
+  function polyCentroid(p, area) {
+    var cx = 0, cy = 0, n = p.length, i, q, cr;
+    for (i = 0; i < n; i++) {
+      q = p[(i + 1) % n]; cr = p[i][0] * q[1] - q[0] * p[i][1];
+      cx += (p[i][0] + q[0]) * cr; cy += (p[i][1] + q[1]) * cr;
+    }
+    return [cx / (6 * area), cy / (6 * area)];
+  }
+  function clipHalf(poly, nx, ny, c) {
+    var out = [], n = poly.length, i, a, b, da, db, t;
+    for (i = 0; i < n; i++) {
+      a = poly[i]; b = poly[(i + 1) % n];
+      da = nx * a[0] + ny * a[1] - c; db = nx * b[0] + ny * b[1] - c;
+      if (da <= 0) { out.push(a); }
+      if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+        t = da / (da - db); out.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
       }
     }
-    return bad;
+    return out;
+  }
+  function wedgePolygon(g, R) {
+    var pts = [], k, an;
+    if (g.full) {
+      for (k = 0; k < 120; k++) { an = 2 * Math.PI * k / 120; pts.push([R * Math.cos(an), R * Math.sin(an)]); }
+      return pts;
+    }
+    pts.push([0, 0]);
+    var steps = Math.max(8, Math.ceil((g.a1 - g.a0) / 0.04));
+    for (k = 0; k <= steps; k++) { an = g.a0 + (g.a1 - g.a0) * k / steps; pts.push([R * Math.cos(an), R * Math.sin(an)]); }
+    return pts;
+  }
+  function cellOf(i, sx, sy, w, base, order) {
+    var poly = base, xi = sx[i], yi = sy[i], n = order.length, q, j, dx, dy, d2, d, dmax, k, v;
+    dmax = 0;
+    for (k = 0; k < poly.length; k++) { v = Math.hypot(poly[k][0] - xi, poly[k][1] - yi); if (v > dmax) { dmax = v; } }
+    for (q = 0; q < n; q++) {
+      j = order[q]; if (j === i) { continue; }
+      dx = sx[j] - xi; dy = sy[j] - yi; d2 = dx * dx + dy * dy; d = Math.sqrt(d2);
+      if (d2 + w[i] - w[j] > 2 * d * dmax) { continue; }          /* this plane cannot cut the cell */
+      poly = clipHalf(poly, 2 * dx, 2 * dy, sx[j] * sx[j] + sy[j] * sy[j] - xi * xi - yi * yi + w[i] - w[j]);
+      if (poly.length < 3) { return []; }
+      dmax = 0;
+      for (k = 0; k < poly.length; k++) { v = Math.hypot(poly[k][0] - xi, poly[k][1] - yi); if (v > dmax) { dmax = v; } }
+    }
+    return poly;
+  }
+  function voronoiSector(g, R) {
+    var its = g.items, n = its.length, base = wedgePolygon(g, R), i, j, iter;
+    var Atot = Math.abs(polyArea(base)), sx = [], sy = [], w = [];
+    its.forEach(function (it, idx) {
+      it.T = Atot * it.rho * it.rho / g.S;
+      var t = (it.d.ex + 1) / 2, u = (it.d.ey + 1) / 2, an, rad;
+      if (g.full) { an = -Math.PI + 2 * Math.PI * t; } else { an = g.a0 + (g.a1 - g.a0) * (0.1 + 0.8 * t); }
+      rad = R * (0.2 + 0.76 * Math.sqrt(u));
+      sx.push(rad * Math.cos(an) + Math.sin(idx * 12.9898) * 0.6);
+      sy.push(rad * Math.sin(an) + Math.cos(idx * 78.233) * 0.6);
+      w.push(0);
+    });
+    function orders() {
+      var out = [];
+      for (i = 0; i < n; i++) {
+        var o = []; for (j = 0; j < n; j++) { o.push(j); }
+        (function (ii) { o.sort(function (p, q) { return Math.hypot(sx[p] - sx[ii], sy[p] - sy[ii]) - Math.hypot(sx[q] - sx[ii], sy[q] - sy[ii]); }); })(i);
+        out.push(o);
+      }
+      return out;
+    }
+    var cells, ords;
+    if (n === 1) {
+      cells = [base];
+    } else {
+      for (iter = 0; iter < 100; iter++) {
+        ords = orders();
+        cells = its.map(function (_, ii) { return cellOf(ii, sx, sy, w, base, ords[ii]); });
+        var maxErr = 0, wm = 0;
+        for (i = 0; i < n; i++) {
+          var poly = cells[i], sa = poly.length >= 3 ? polyArea(poly) : 0, area = Math.abs(sa);
+          maxErr = Math.max(maxErr, Math.abs(its[i].T - area) / its[i].T);
+          if (area > 1e-6) {
+            var c = polyCentroid(poly, sa);
+            sx[i] += 0.6 * (c[0] - sx[i]); sy[i] += 0.6 * (c[1] - sy[i]);
+          }
+          w[i] += 0.8 * (its[i].T - area) / 1.57;
+          wm += w[i];
+        }
+        /* every site must keep owning at least its own point, so no cell can ever vanish */
+        for (i = 0; i < n; i++) {
+          var need = -Infinity;
+          for (j = 0; j < n; j++) {
+            if (j === i) { continue; }
+            var ddx = sx[i] - sx[j], ddy = sy[i] - sy[j];
+            need = Math.max(need, w[j] - (ddx * ddx + ddy * ddy));
+          }
+          w[i] = Math.max(w[i], need + 0.25 * its[i].T / Math.PI);
+        }
+        wm = 0; for (i = 0; i < n; i++) { wm += w[i]; }
+        wm /= n;
+        for (i = 0; i < n; i++) { w[i] -= wm; }
+        if (iter > 8 && maxErr < 0.02) { break; }
+      }
+      ords = orders();
+      cells = its.map(function (_, ii) { return cellOf(ii, sx, sy, w, base, ords[ii]); });
+    }
+    var worst = 0;
+    its.forEach(function (it, ii) {
+      var poly = cells[ii];
+      if (poly.length < 3) { poly = [[sx[ii], sy[ii]], [sx[ii] + 0.5, sy[ii]], [sx[ii], sy[ii] + 0.5]]; }
+      var sa = polyArea(poly), area = Math.abs(sa), c = area > 1e-9 ? polyCentroid(poly, sa) : [sx[ii], sy[ii]];
+      it.poly = poly; it.area = area; it.cx = c[0]; it.cy = c[1]; it.r = Math.sqrt(area / Math.PI);
+      worst = Math.max(worst, Math.abs(it.T - area) / it.T);
+    });
+    return worst;
   }
 
   function splitName(nm) {
@@ -451,15 +529,14 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var half = Math.min(W, H) / 2;
     var tb = 20, nb = clamp(18, 22, half * 0.07), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
     var hubR = clamp(18, 30, R * 0.11);
-    HUB = hubR;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
 
     var groups = d3.groups(nodes, function (n) { return n.sector; }).map(function (g) {
-      var items = g[1].map(function (n) { return {d: n, rho: Math.pow(n.mcap, EXP), r: 0, x: 0, y: 0}; })
+      var items = g[1].map(function (n) { return {d: n, rho: Math.pow(n.mcap, EXP), r: 0}; })
         .sort(function (p, q) { return q.rho - p.rho; });
-      return {name: g[0], items: items, S: d3.sum(items, function (it) { return it.rho * it.rho; }), rhoMax: items[0].rho};
+      return {name: g[0], items: items, S: d3.sum(items, function (it) { return it.rho * it.rho; })};
     }).sort(function (p, q) { return q.S - p.S; });
     var n = groups.length;
     var angs = allocAngles(groups.map(function (g) { return g.S; }));
@@ -468,19 +545,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       g.a0 = cur; g.a1 = cur + angs[i]; g.am = (g.a0 + g.a1) / 2; g.full = n === 1; cur = g.a1;
     });
 
-    var k = Infinity;
-    groups.forEach(function (g) {
-      var ang = g.a1 - g.a0, sn = Math.sin(ang / 2);
-      var rins = g.full ? R : R * sn / (1 + sn);
-      k = Math.min(k, Math.sqrt(DENS * ang * R * R / (2 * Math.PI * g.S)), 0.95 * rins / g.rhoMax);
-    });
-    var tries = 0, bad;
-    do {
-      bad = 0;
-      groups.forEach(function (g) { bad = Math.max(bad, packSector(g, k, R)); });
-      if (bad > 1.5) { k *= 0.93; }
-      tries++;
-    } while (bad > 1.5 && tries < 10);
+    var geoErr = 0;
+    groups.forEach(function (g) { geoErr = Math.max(geoErr, voronoiSector(g, R)); });
+    window.__geoErr = geoErr;
 
     var defs = svg.append("defs");
     var rg = svg.append("g");          /* the whole dial: everything inside turns together */
@@ -505,26 +572,27 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     rg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke");
 
-    /* ---- bubbles ---- */
+    /* ---- map cells ---- */
     var all = [];
     groups.forEach(function (g) { g.items.forEach(function (it) { it.sector = g.name; all.push(it); }); });
-    var leaf = rg.append("g").selectAll("g").data(all).join("g")
-      .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
-    var circles = leaf.append("circle").attr("class", "leaf").attr("r", function (d) { return d.r; })
-      .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.5)
-      .style(NS, "non-scaling-stroke");
-    var labs = leaf.append("g");       /* turned back so the text always stays upright */
+    var cells = rg.append("g").selectAll("path").data(all).join("path").attr("class", "leaf")
+      .attr("d", function (d) { return "M" + d.poly.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join("L") + "Z"; })
+      .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.2)
+      .attr("stroke-linejoin", "round").style(NS, "non-scaling-stroke");
+    rg.append("circle").attr("r", R).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").attr("pointer-events", "none");
+    var labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none");
     var tickers = labs.append("text").attr("class", "t").attr("text-anchor", "middle")
       .text(function (d) { return d.d.ticker; });
     var pcts = labs.append("text").attr("class", "p").attr("text-anchor", "middle")
       .text(function (d) { return fmtPct(d.d.perf); });
     tickers.each(function (d) {
-      var rk = d.r, fs = clamp(7, 18, rk * 0.42);
-      d3.select(this).style("display", rk >= 13 ? null : "none").attr("font-size", fs).attr("y", rk >= 24 ? -fs * 0.1 : fs * 0.35);
+      var rk = d.r, fs = clamp(6, 16, rk * 0.5);
+      d3.select(this).style("display", rk >= 11 ? null : "none").attr("font-size", fs).attr("y", rk >= 22 ? -fs * 0.1 : fs * 0.35);
     });
     pcts.each(function (d) {
-      var rk = d.r, fs = clamp(7, 13, rk * 0.3);
-      d3.select(this).style("display", rk >= 24 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
+      var rk = d.r, fs = clamp(6, 12, rk * 0.32);
+      d3.select(this).style("display", rk >= 22 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
     });
 
     /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
@@ -572,7 +640,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     /* ---- turning the dial ---- */
     applyRot = function (deg) {
       rg.attr("transform", "rotate(" + deg.toFixed(2) + ")");
-      labs.attr("transform", "rotate(" + (-deg).toFixed(2) + ")");
+      labs.attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ") rotate(" + (-deg).toFixed(2) + ")"; });
     };
     function setRot(deg) {
       rot = deg;
@@ -623,10 +691,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + "\">" + fmtPct(x.perf) + "</span>" +
         "<br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
     }
-    circles.on("mouseover", function (ev, d) {
+    cells.on("mouseover", function (ev, d) {
         tip.innerHTML = tipHtml(d); tip.style.display = "block";
-        d3.select(this.parentNode).raise();
-        d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2.2);
+        d3.select(this).raise().attr("stroke", "#ffffff").attr("stroke-width", 2);
       })
       .on("mousemove", function (ev) {
         var x = ev.clientX + 14, y = ev.clientY + 14;
@@ -636,7 +703,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       })
       .on("mouseout", function () {
         tip.style.display = "none";
-        d3.select(this).attr("stroke", "#000000").attr("stroke-width", 1.5);
+        d3.select(this).attr("stroke", "#000000").attr("stroke-width", 1.2);
       })
       .on("click", function (ev, d) {
         ev.stopPropagation();
@@ -1052,20 +1119,69 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v10", path=str(d))
+        return components.declare_component("smz_bubbles_v11", path=str(d))
     except Exception:
         return None
 
 
+def _corr_layout(p: pd.DataFrame, tickers: tuple, sectors: tuple, industries: tuple, upto: str,
+                 lookback: int = 90) -> dict:
+    """2-D positions per sector: stocks whose prices move together (and share an industry) get close positions."""
+    px = p[(p["date"] <= upto) & (p["ticker"].isin(tickers))]
+    px = px.pivot(index="date", columns="ticker", values="close").sort_index().tail(lookback + 1)
+    corr = px.pct_change().iloc[1:].corr(min_periods=20)
+    sec = dict(zip(tickers, sectors)); ind = dict(zip(tickers, industries))
+    out = {}
+    for s in set(sectors):
+        names = [t for t in tickers if sec[t] == s]
+        n = len(names)
+        if n < 3:
+            for k, t in enumerate(names):
+                out[t] = (float(np.cos(k * 2.4)) * 0.6, float(np.sin(k * 2.4)) * 0.6)
+            continue
+        C = corr.reindex(index=names, columns=names).to_numpy(dtype=float)
+        C = np.where(np.isnan(C), 0.0, C)
+        same = np.array([[ind[a] == ind[b] for b in names] for a in names], dtype=float)
+        C = np.clip(C + 0.15 * same, -1.0, 1.0)
+        np.fill_diagonal(C, 1.0)
+        D2 = 2.0 * (1.0 - C)
+        J = np.eye(n) - 1.0 / n
+        B = -0.5 * J @ D2 @ J
+        vals, vecs = np.linalg.eigh(B)
+        idx = np.argsort(vals)[::-1][:2]
+        X = vecs[:, idx] * np.sqrt(np.clip(vals[idx], 0.0, None))
+        for k in range(2):
+            lo, hi = float(X[:, k].min()), float(X[:, k].max())
+            X[:, k] = (X[:, k] - lo) / ((hi - lo) or 1.0) * 2.0 - 1.0
+        for k, t in enumerate(names):
+            out[t] = (float(X[k, 0]), float(X[k, 1]))
+    return out
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def corr_embedding(tickers: tuple, sectors: tuple, industries: tuple, upto: str) -> dict:
+    """Cached wrapper: uses the price history already loaded for the screener."""
+    p, _ = load_data()
+    return _corr_layout(p, tickers, sectors, industries, upto)
+
+
 def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_industry: bool) -> dict:
-    """Rows for the bubble map: only stocks with a market cap, biggest first."""
+    """Rows for the map: only stocks with a market cap, biggest first. Each row also carries a 2-D position
+    (ex, ey) from price correlation so that co-moving stocks end up next to each other."""
     d = day.dropna(subset=["mcap", perf_col])
     d = d[d["mcap"] > 0].sort_values("mcap", ascending=False).head(top_n)
     nodes = [dict(ticker=str(r["ticker"]),
                   sector=str(r["sector"]) if pd.notna(r["sector"]) else "Other",
                   industry=str(r["industry"]) if pd.notna(r["industry"]) else "Other",
                   mcap=float(r["mcap"]), perf=float(r[perf_col]), price=float(r["close"]),
-                  volume=float(r["volume"])) for _, r in d.iterrows()]
+                  volume=float(r["volume"]), ex=0.0, ey=0.0) for _, r in d.iterrows()]
+    try:
+        emb = corr_embedding(tuple(n["ticker"] for n in nodes), tuple(n["sector"] for n in nodes),
+                             tuple(n["industry"] for n in nodes), str(day["date"].iloc[0]))
+        for n in nodes:
+            n["ex"], n["ey"] = emb.get(n["ticker"], (0.0, 0.0))
+    except Exception:  # never let the layout hint break the map
+        pass
     return {"nodes": nodes, "by_industry": bool(by_industry)}
 
 
@@ -1125,12 +1241,12 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     c = st.columns([1.1, 1.3, 1.0, 4.6])
     label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
     scale = 3 * float(c[1].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step"))
-    top_n = int(c[2].number_input("Max Stocks", 20, 500, 150, step=10, key="bub_top"))
+    top_n = int(c[2].number_input("Max Stocks", 20, 600, 500, step=10, key="bub_top"))
     perf_col = PERF_COLS[label]
     payload = build_bubble_payload(day, perf_col, top_n, False)
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
     c[3].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
-                 + " | drag the dial to turn it, click a bubble to open its chart")
+                 + " | co-moving stocks sit side by side | drag the dial to turn it, click a stock to open its chart")
     comp = get_bubble_component()
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
