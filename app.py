@@ -318,8 +318,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         var AC = window.AudioContext || window.webkitAudioContext;
         audio = AC ? new AC() : null;
         if (audio) {
-          var master = audio.createGain(); master.gain.value = 0.5;
-          lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1900; lp.Q.value = 0.4;
+          var master = audio.createGain(); master.gain.value = 0.4;
+          lp = audio.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1500; lp.Q.value = 0.3;
           lp.connect(master); master.connect(audio.destination);
         }
       } catch (e) { audio = null; }
@@ -329,7 +329,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   function blip(t, f0, f1, vol, dur, type) {
     var o = audio.createOscillator(), g = audio.createGain();
     o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.002);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.01);
   }
@@ -337,11 +337,11 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   function tik() {
     if (!audio || muted || !lp) { return; }
     var now = audio.currentTime;
-    if (now - lastClickT < 0.045) { return; }
+    if (now - lastClickT < 0.05) { return; }
     lastClickT = now;
     var t = now + 0.002, v = 0.97 + Math.random() * 0.06;
-    blip(t, 900 * v, 540 * v, 0.085, 0.03, "sine");
-    blip(t + 0.032, 450 * v, 300 * v, 0.07, 0.045, "sine");
+    blip(t, 740 * v, 470 * v, 0.06, 0.036, "sine");
+    blip(t + 0.034, 370 * v, 255 * v, 0.05, 0.05, "sine");
   }
 
   function legend(step, label) {
@@ -449,7 +449,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     legend(step, a.perf_label || "Today");
 
     var half = Math.min(W, H) / 2;
-    var tb = 20, nb = clamp(26, 30, half * 0.1), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
+    var tb = 20, nb = clamp(18, 22, half * 0.07), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
     var hubR = clamp(18, 30, R * 0.11);
     HUB = hubR;
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
@@ -502,8 +502,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     });
     rg.append("circle").attr("r", R2).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.6)
       .attr("stroke-width", 1).style(NS, "non-scaling-stroke");
-    rg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff")
-      .attr("stroke-width", 2.2).style(NS, "non-scaling-stroke");
+    rg.append("circle").attr("r", R).attr("fill", "#000000").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke");
 
     /* ---- bubbles ---- */
     var all = [];
@@ -539,14 +539,14 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var cv = document.createElement("canvas").getContext("2d");
     var rc1 = R + nb * 0.25, rc2 = R + nb * 0.76, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
-      var m = g.am, top = true, lines = splitName(g.name);   /* every name has the same orientation */
+      var m = g.am, top = true, lines = [g.name];   /* every name has the same orientation */
       var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
       lines.forEach(function (txt, li) {
         var rc = lines.length === 1 ? rc0 : (top ? (li === 0 ? rc2 : rc1) : (li === 0 ? rc1 : rc2));
         cv.font = "700 12px Arial";
         var w12 = cv.measureText(txt).width;
         var avail = 2 * hh * rc * 0.94;
-        var fs = clamp(5, 9, 12 * avail / Math.max(1, w12));
+        var fs = clamp(5, 10, 12 * avail / Math.max(1, w12));
         var rb = top ? rc - fs * 0.35 : rc + fs * 0.35;
         var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
         var dd = top ? "M " + P(m - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(m + hh)
@@ -559,8 +559,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     });
 
     /* ---- centre hub (does not turn) ---- */
-    svg.append("circle").attr("r", hubR).attr("fill", "#000000").attr("stroke", "#ffffff")
-      .attr("stroke-width", 3.2).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
+    svg.append("circle").attr("r", hubR).attr("fill", "#000000").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 2.6).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
     svg.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
       .attr("font-size", hubR * 0.5).attr("font-weight", 800).attr("fill", "#ffffff").attr("letter-spacing", 0.4)
       .attr("pointer-events", "none").text("S.M.Z");
@@ -1052,7 +1052,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v9", path=str(d))
+        return components.declare_component("smz_bubbles_v10", path=str(d))
     except Exception:
         return None
 
