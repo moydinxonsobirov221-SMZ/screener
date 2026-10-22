@@ -18,6 +18,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from smz_zigzag import add_zigzag_to_fig
+
 try:
     import streamlit.components.v1 as components
 except Exception:  # newer framework versions may drop this module
@@ -939,8 +941,62 @@ def chart_doc(symbol: str, init_height: int = 700, offset: int = 170) -> str:
             .replace("__OFFSET__", str(int(offset))))
 
 
-def chart_widget(symbol: str, init_height: int = 700, offset: int = 170) -> None:
-    render_iframe(chart_doc(symbol, init_height, offset), init_height)
+def chart_widget(
+    symbol: str,
+    init_height: int = 700,
+    offset: int = 170,
+    history: Optional[pd.DataFrame] = None,
+) -> None:
+    """Render local OHLC candles with the S.M.Z ZigZag overlay.
+
+    TradingView remains as a fallback when local OHLC history is unavailable.
+    """
+    required = {"date", "open", "high", "low", "close"}
+    if history is None or history.empty or not required.issubset(history.columns):
+        st.info("Local OHLC history is unavailable; showing the TradingView chart without the S.M.Z ZigZag overlay.")
+        render_iframe(chart_doc(symbol, init_height, offset), init_height)
+        return
+
+    chart_df = history.copy()
+    chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
+    chart_df = chart_df.dropna(subset=["date", "open", "high", "low", "close"])
+    chart_df = chart_df.sort_values("date").tail(250).reset_index(drop=True)
+    if chart_df.empty:
+        st.info("No valid OHLC candles were found; showing the TradingView chart instead.")
+        render_iframe(chart_doc(symbol, init_height, offset), init_height)
+        return
+
+    # The ZigZag module uses df.index for its pivot x-coordinates, so use dates
+    # as the index to align the overlay with the candlesticks.
+    zigzag_df = chart_df.set_index("date", drop=False)
+    fig = go.Figure(
+        data=[go.Candlestick(
+            x=chart_df["date"],
+            open=chart_df["open"],
+            high=chart_df["high"],
+            low=chart_df["low"],
+            close=chart_df["close"],
+            name="Price",
+            increasing_line_color="#30cc5a",
+            decreasing_line_color="#f63538",
+        )]
+    )
+    fig = add_zigzag_to_fig(fig, zigzag_df)
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="#d7dce2"),
+        height=max(520, int(init_height)),
+        margin=dict(l=12, r=12, t=32, b=12),
+        title=dict(text=f"{symbol} · Daily candles + S.M.Z ZigZag", x=0.01, xanchor="left"),
+        xaxis=dict(title=None, rangeslider=dict(visible=False), showgrid=False),
+        yaxis=dict(title="Price", side="right", gridcolor="#20242b", fixedrange=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0),
+        hovermode="x unified",
+    )
+    stretch(st.plotly_chart, fig, config={"displayModeBar": True, "scrollZoom": True},
+            theme=None, key=f"smz_price_chart_{re.sub(r'[^A-Za-z0-9_]', '_', symbol)}")
 
 
 def inject_header() -> None:
@@ -1450,10 +1506,12 @@ def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
 
 
 def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
-    """Grafik oynasi: ramka ichida 'S.M.Z AI' tugmasi, bosilsa grafik o'rniga AI tahlil."""
+    """Grafik oynasi: S.M.Z ZigZag narx grafigi va alohida S.M.Z AI tugmasi."""
     S["ai_view"] = False
     exch = row["exchange"] if row is not None and "exchange" in row else None
     full_sym = chart_symbol(sym, exch)
+    all_prices, _ = load_data()
+    history = all_prices[all_prices["ticker"].astype(str).str.upper() == sym.upper()].copy()
 
     @st.dialog(sym, width="large")
     def _dialog():
@@ -1473,7 +1531,7 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
                 left.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>',
                               unsafe_allow_html=True)
             stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        chart_widget(full_sym, 700, 170)
+        chart_widget(full_sym, 700, 170, history=history)
 
     _dialog()
 
