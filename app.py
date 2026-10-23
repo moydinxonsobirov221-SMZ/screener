@@ -563,9 +563,33 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       g.a0 = cur; g.a1 = cur + angs[i]; g.am = (g.a0 + g.a1) / 2; g.full = n === 1; cur = g.a1;
     });
 
-    var geoErr = 0;
-    groups.forEach(function (g) { geoErr = Math.max(geoErr, voronoiSector(g, R)); });
-    window.__geoErr = geoErr;
+    /* ---- onion layers: inside every sector the biggest company is the outer layer, the smallest sits at the centre ---- */
+    var cvm = document.createElement("canvas").getContext("2d");
+    var rIn0 = hubR + 3;
+    groups.forEach(function (g) {
+      var its = g.items, m = its.length, total = R - rIn0, minT = Math.min(3, total / m);
+      var wts = its.map(function (it) { return it.rho; });
+      var fixed = wts.map(function () { return false; }), th = [], k;
+      for (k = 0; k < m + 2; k++) {
+        var rem = total, free = 0;
+        fixed.forEach(function (f, q) { if (f) { rem -= minT; } else { free += wts[q]; } });
+        th = wts.map(function (w, q) { return fixed[q] ? minT : (free > 0 ? rem * w / free : 0); });
+        var ch = false;
+        th.forEach(function (t, q) { if (!fixed[q] && t < minT) { fixed[q] = true; ch = true; } });
+        if (!ch) { break; }
+      }
+      var rr = R;
+      its.forEach(function (it, q) {
+        it.ro = rr; it.ri = rr - th[q]; rr = it.ri; it.th = th[q];
+        it.a0 = g.a0; it.a1 = g.full ? g.a0 + 2 * Math.PI - 0.0002 : g.a1;
+      });
+    });
+    function bandPath(d) {
+      var large = (d.a1 - d.a0) > Math.PI ? 1 : 0;
+      var P = function (r, an) { return (r * Math.cos(an)).toFixed(2) + "," + (r * Math.sin(an)).toFixed(2); };
+      return "M" + P(d.ro, d.a0) + "A" + d.ro.toFixed(2) + "," + d.ro.toFixed(2) + " 0 " + large + " 1 " + P(d.ro, d.a1) +
+        "L" + P(d.ri, d.a1) + "A" + d.ri.toFixed(2) + "," + d.ri.toFixed(2) + " 0 " + large + " 0 " + P(d.ri, d.a0) + "Z";
+    }
 
     var defs = svg.append("defs");
     var rg = svg.append("g");          /* the whole dial: everything inside turns together */
@@ -594,23 +618,28 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var all = [];
     groups.forEach(function (g) { g.items.forEach(function (it) { it.sector = g.name; all.push(it); }); });
     var cells = rg.append("g").selectAll("path").data(all).join("path").attr("class", "leaf")
-      .attr("d", function (d) { return "M" + d.poly.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join("L") + "Z"; })
+      .attr("d", bandPath)
       .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.2)
       .attr("stroke-linejoin", "round").style(NS, "non-scaling-stroke");
     rg.append("circle").attr("r", R).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").attr("pointer-events", "none");
-    var labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none");
-    var tickers = labs.append("text").attr("class", "t").attr("text-anchor", "middle")
-      .text(function (d) { return d.d.ticker; });
-    var pcts = labs.append("text").attr("class", "p").attr("text-anchor", "middle")
-      .text(function (d) { return fmtPct(d.d.perf); });
-    tickers.each(function (d) {
-      var rk = d.r, fs = clamp(6, 16, rk * 0.5);
-      d3.select(this).style("display", rk >= 11 ? null : "none").attr("font-size", fs).attr("y", rk >= 22 ? -fs * 0.1 : fs * 0.35);
-    });
-    pcts.each(function (d) {
-      var rk = d.r, fs = clamp(6, 12, rk * 0.32);
-      d3.select(this).style("display", rk >= 22 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
+    var lblg = rg.append("g").attr("pointer-events", "none");
+    all.forEach(function (d, idx) {
+      var span = d.a1 - d.a0, rmid = (d.ro + d.ri) / 2, tk = d.d.ticker, pc = fmtPct(d.d.perf);
+      var fs = clamp(6, 15, d.th * 0.58), avail = span * rmid * 0.94, txt = null;
+      function wOf(t, f) { cvm.font = "700 " + f + "px Arial"; return cvm.measureText(t).width; }
+      if (d.th >= 8) {
+        if (wOf(tk + "  " + pc, fs) <= avail) { txt = tk + "  " + pc; }
+        else if (wOf(tk, fs) <= avail) { txt = tk; }
+        else { var f2 = fs * avail / wOf(tk, fs); if (f2 >= 6) { fs = f2; txt = tk; } }
+      }
+      if (!txt) { return; }
+      var w = wOf(txt, fs), rb = rmid - fs * 0.35, mid = (d.a0 + d.a1) / 2, hh = Math.min(span / 2, (w / 2 + 6) / rb);
+      var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
+      var id = "lp" + idx;
+      defs.append("path").attr("id", id).attr("d", "M " + P(mid - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(mid + hh));
+      lblg.append("text").attr("class", "t").attr("font-size", fs)
+        .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle").text(txt);
     });
 
     /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
@@ -658,7 +687,6 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     /* ---- turning the dial ---- */
     applyRot = function (deg) {
       rg.attr("transform", "rotate(" + deg.toFixed(2) + ")");
-      labs.attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ") rotate(" + (-deg).toFixed(2) + ")"; });
     };
     function setRot(deg) {
       rot = deg;
@@ -1123,7 +1151,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v14", path=str(d))
+        return components.declare_component("smz_bubbles_v15", path=str(d))
     except Exception:
         return None
 
@@ -1234,15 +1262,16 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     if not meta["has_fund"]:
         st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
         return []
-    c = st.columns([1.1, 1.3, 1.0, 4.6])
+    c = st.columns([1.1, 6.9])
     label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
-    scale = 3 * float(c[1].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step"))
-    top_n = int(c[2].number_input("Max Stocks", 20, 600, 500, step=10, key="bub_top"))
+    step_v = float(S.get("bub_step", 5))
+    scale = 3 * step_v
+    top_n = int(S.get("bub_top", 500))
     perf_col = PERF_COLS[label]
     payload = build_bubble_payload(day, perf_col, top_n, False)
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
-    c[3].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
-                 + " | co-moving stocks sit side by side | drag the dial to turn it, click a stock to open its chart")
+    c[1].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
+                 + " | biggest company on the outer layer, smallest in the centre | drag the dial to turn it, click a stock to open its chart")
     comp = get_bubble_component()
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
@@ -1258,6 +1287,9 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     losers = _rank(valid.nsmallest(21, perf_col))
     ev = comp(nodes=payload["nodes"], scale=scale, perf_label=label, gainers=gainers, losers=losers,
               key="smz_bubbles", default=None)
+    b = st.columns([1.3, 1.0, 5.7])
+    b[0].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step")
+    b[1].number_input("Max Stocks", 20, 600, 500, step=10, key="bub_top")
     if isinstance(ev, dict) and ev.get("ticker"):
         sym = clean_symbol(str(ev["ticker"]))
         if sym:
