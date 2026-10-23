@@ -15,7 +15,6 @@ from typing import Callable, Optional
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
 try:
@@ -262,7 +261,16 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   padding:4px 12px;cursor:pointer;z-index:11;background:#1e8f45}
 #snd.off{background:#c0242f}
 #snd:hover{filter:brightness(1.15)}
-</style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div>
+.side{position:fixed;display:none;z-index:5;font-size:12px}
+.side .hd{font-weight:700;font-size:12px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
+.side .hd.g{color:#34b560}.side .hd.r{color:#e0434f}
+.side .row{display:flex;align-items:center;margin-bottom:1px;padding:0 8px;border-radius:2px;color:#fff;font-weight:700;
+  cursor:pointer;overflow:hidden;white-space:nowrap}
+.side .row:hover{outline:1.5px solid rgba(255,255,255,.8);outline-offset:-1.5px}
+.side .rk{width:20px;opacity:.65;font-weight:600;font-size:.85em}
+.side .tk{flex:1;overflow:hidden;text-overflow:ellipsis}
+.side .pc{margin-left:6px;font-variant-numeric:tabular-nums}
+</style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
 (function () {
@@ -508,7 +516,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
-    var key = JSON.stringify([a.nodes, a.scale, a.perf_label]) + "|" + W + "|" + H;
+    var key = JSON.stringify([a.nodes, a.scale, a.perf_label, a.gainers, a.losers]) + "|" + W + "|" + H;
     if (!force && key === lastKey) { return; }
     lastKey = key;
     setHeight(H);
@@ -522,6 +530,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     svg.selectAll("*").remove();
     stopInertia();
     document.getElementById("tip").style.display = "none";
+    document.getElementById("gl").style.display = "none"; document.getElementById("ll").style.display = "none";
     if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
     showMsg("");
     legend(step, a.perf_label || "Today");
@@ -683,6 +692,42 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         svg.style("cursor", "grab");
         if (Math.abs(vel) > 25 && performance.now() - lastMoveT < 90) { startInertia(); }
       }));
+
+    /* ---- Top 21 gainers (left) and Top 21 losers (right), 2.1 cm (~79 px) away from the dial ---- */
+    var cellByT = {};
+    cells.each(function (d) { cellByT[d.d.ticker] = this; });
+    (function () {
+      var side = W / 2 - R3, gap = 79;
+      if (side - gap < 110) { gap = Math.max(14, side - 110); }
+      var wl = clamp(96, 190, side - gap - 6);
+      var top = 44, bottomRes = 52, avail = H - top - bottomRes;
+      var rh = clamp(16, 27, (avail - 26) / 21), total = 26 + 21 * rh;
+      var y0 = top + Math.max(0, (avail - total) / 2);
+      function fill(id, rows, title, isGain, x) {
+        var el = document.getElementById(id);
+        el.style.left = Math.max(2, x) + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
+        el.style.fontSize = clamp(10, 12.5, rh * 0.56) + "px";
+        var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>";
+        (rows || []).slice(0, 21).forEach(function (r, i) {
+          h += "<div class=\"row\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px;background:" + color(r.perf) + "\"><span class=\"rk\">" +
+            (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span><span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
+        });
+        el.innerHTML = h;
+        Array.prototype.forEach.call(el.querySelectorAll(".row"), function (row) {
+          var t = row.getAttribute("data-t");
+          row.addEventListener("mouseenter", function () {
+            var c = cellByT[t]; if (c) { d3.select(c).raise().attr("stroke", "#ffffff").attr("stroke-width", 2); }
+          });
+          row.addEventListener("mouseleave", function () {
+            var c = cellByT[t]; if (c) { d3.select(c).attr("stroke", "#000000").attr("stroke-width", 1.2); }
+          });
+          row.addEventListener("click", function () { setValue({ticker: t, n: Date.now() + Math.random()}); });
+        });
+      }
+      var lab = esc(a.perf_label || "Today");
+      fill("gl", a.gainers, "\u25B2 Top 21 gainers \u00B7 " + lab, true, W / 2 - R3 - gap - wl);
+      fill("ll", a.losers, "\u25BC Top 21 losers \u00B7 " + lab, false, W / 2 + R3 + gap);
+    })();
 
     var tip = document.getElementById("tip");
     function tipHtml(d) {
@@ -1036,65 +1081,8 @@ def kpi_html(day: pd.DataFrame) -> str:
 
 
 # =============================================================================
-# 5. MARKET MAP (treemap)
+# 5. BUBBLE MAP (dial)
 # =============================================================================
-def chg_color(v, scale: float) -> str:
-    if v is None or pd.isna(v):
-        return PALETTE[3]
-    idx = int(np.clip(np.round(v / (scale / 3.0)), -3, 3)) + 3
-    return PALETTE[idx]
-
-
-def legend_html(scale: float) -> str:
-    labels = [-scale, -2 * scale / 3, -scale / 3, 0, scale / 3, 2 * scale / 3, scale]
-    cells = "".join(f'<div style="background:{c}">{l:+.0f}%</div>' if l else f'<div style="background:{c}">0%</div>'
-                    for c, l in zip(PALETTE, labels))
-    return f'<div class="legend">{cells}</div>'
-
-
-def build_treemap(df: pd.DataFrame, size_col: str, scale: float, top_n: int, by_industry: bool) -> Optional[go.Figure]:
-    """Sector (> industry) > ticker treemap. Block size = size_col, block color = daily change."""
-    d = df.dropna(subset=[size_col, "chg"])
-    d = d[d[size_col] > 0].sort_values(size_col, ascending=False).head(top_n)
-    if d.empty:
-        return None
-    ids, labels, parents, values, colors, text, hover = ["root"], ["Market"], [""], [0], ["#000000"], [""], [""]
-
-    def add_node(i, label, parent, value, color, txt, hov):
-        ids.append(i); labels.append(label); parents.append(parent); values.append(value)
-        colors.append(color); text.append(txt); hover.append(hov)
-
-    def group_stats(g):
-        w = np.average(g["chg"], weights=g[size_col])
-        return f"{len(g)} stocks | weighted change {w:+.2f}%"
-
-    d = d.assign(_sector=d["sector"].fillna("Other"), _industry=d["industry"].fillna("Other"))
-    for sector, gs in d.groupby("_sector"):
-        sid = f"S|{sector}"
-        add_node(sid, str(sector), "root", 0, "#0c0c0c", "", html.escape(f"{sector}: {group_stats(gs)}"))
-        subgroups = [(sid, gs)]
-        if by_industry:
-            subgroups = []
-            for industry, gi in gs.groupby("_industry"):
-                iid = f"I|{sector}|{industry}"
-                add_node(iid, str(industry), sid, 0, "#151515", "", html.escape(f"{industry}: {group_stats(gi)}"))
-                subgroups.append((iid, gi))
-        for parent_id, g in subgroups:
-            for r in g.itertuples(index=False):
-                hov = (f"<b>{html.escape(str(r.ticker))}</b><br>Price ${r.close:.2f}<br>Change {r.chg:+.2f}%"
-                       f"<br>Volume {r.volume:,.0f}<br>$ Volume {r.dvol:,.2f}M")
-                add_node(f"T|{r.ticker}", str(r.ticker), parent_id, float(getattr(r, size_col)),
-                         chg_color(r.chg, scale), f"{r.chg:+.1f}%", hov)
-
-    fig = go.Figure(go.Treemap(
-        ids=ids, labels=labels, parents=parents, values=values, text=text, hovertext=hover, hoverinfo="text",
-        textinfo="label+text", branchvalues="remainder", textfont=dict(size=13, color="white"),
-        marker=dict(colors=colors, line=dict(width=1, color="#000000"), pad=dict(t=20, l=3, r=3, b=3)),
-        tiling=dict(packing="squarify", pad=1), pathbar=dict(visible=False)))
-    fig.update_layout(margin=dict(t=0, l=0, r=0, b=0), height=620, paper_bgcolor="#000000", plot_bgcolor="#000000")
-    return fig
-
-
 def _component_dir() -> Optional[Path]:
     """Write the map page to a folder (next to the app, or the temp dir) and return the folder."""
     for base in (Path(__file__).resolve().parent, Path(tempfile.gettempdir())):
@@ -1119,7 +1107,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v11", path=str(d))
+        return components.declare_component("smz_bubbles_v12", path=str(d))
     except Exception:
         return None
 
@@ -1189,25 +1177,9 @@ def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_indust
 # 6. VIEWS
 # =============================================================================
 def view_overview(day: pd.DataFrame, meta: dict) -> list:
-    """Market overview: KPIs, breadth bar, stock map and top lists."""
+    """Market overview: KPIs, breadth bar and top lists (the stock map lives in the Bubbles tab)."""
     items: list = []
     st.markdown(kpi_html(day), unsafe_allow_html=True)
-
-    c = st.columns([1.3, 1.1, 1.0, 1.4, 3.0])
-    size_opts = {"$ Volume": "dvol", "Volume": "volume"}
-    if meta["has_fund"]:
-        size_opts["Market Cap"] = "mcap"
-    size_label = c[0].selectbox("Block Size", list(size_opts), key="map_size")
-    scale = float(c[1].selectbox("Color Scale (+/- %)", [3, 5, 10, 20], index=2, key="map_scale"))
-    top_n = int(c[2].number_input("Max Stocks", 30, 500, 250, step=25, key="map_top"))
-    by_ind = c[3].toggle("Group by Industry", value=meta["has_industry"], disabled=not meta["has_industry"],
-                         key="map_ind")
-    fig = build_treemap(day, size_opts[size_label], scale, top_n, bool(by_ind) and meta["has_industry"])
-    if fig is None:
-        st.info("Not enough data to draw the map for this date.")
-    else:
-        stretch(st.plotly_chart, fig, config={"displayModeBar": False}, theme=None)
-        st.markdown(legend_html(scale), unsafe_allow_html=True)
 
     lists = [
         ("Top Gainers", lambda d: d.nlargest(10, "chg")),
@@ -1251,7 +1223,16 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
         return []
-    ev = comp(nodes=payload["nodes"], scale=scale, perf_label=label, key="smz_bubbles", default=None)
+    valid = day.dropna(subset=[perf_col])
+
+    def _rank(df: pd.DataFrame) -> list:
+        return [dict(ticker=str(r["ticker"]), perf=float(r[perf_col]), price=float(r["close"]))
+                for _, r in df.iterrows()]
+
+    gainers = _rank(valid.nlargest(21, perf_col))
+    losers = _rank(valid.nsmallest(21, perf_col))
+    ev = comp(nodes=payload["nodes"], scale=scale, perf_label=label, gainers=gainers, losers=losers,
+              key="smz_bubbles", default=None)
     if isinstance(ev, dict) and ev.get("ticker"):
         sym = clean_symbol(str(ev["ticker"]))
         if sym:
