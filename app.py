@@ -263,17 +263,22 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #snd:hover{filter:brightness(1.15)}
 .side{position:fixed;display:none;z-index:5;font-size:12px}
 .side .hd{font-weight:700;font-size:12px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
-.side .hd.g{color:#34b560}.side .hd.r{color:#e0434f}
-.side .row{display:flex;align-items:center;box-sizing:border-box;margin-bottom:2px;padding:0 8px;border-radius:3px;
-  font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap}
-.side .row.g{color:#30cc5a;border:1px solid #30cc5a;background:rgba(48,204,90,.07)}
-.side .row.r{color:#f63538;border:1px solid #f63538;background:rgba(246,53,56,.07)}
-.side .row:hover{background:rgba(255,255,255,.12)}
-.side .rk{width:18px;opacity:.65;font-weight:600;font-size:.85em}
-.side .tk{width:52px;overflow:hidden;text-overflow:ellipsis}
-.side .px{width:52px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px}
-.side .sc{flex:1;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:.88em;opacity:.9}
-.side .pc{margin-left:6px;font-variant-numeric:tabular-nums}
+.side .hd.g{color:#22a04d}.side .hd.r{color:#d02a33}
+.side .row{display:flex;align-items:stretch;box-sizing:border-box;margin-bottom:2px;padding:0;border-radius:3px;
+  font-weight:400;color:#e6e6e6;cursor:pointer;overflow:hidden;white-space:nowrap;line-height:1}
+.side .row.g{border:1px solid #1b7a3b;background:rgba(34,160,77,.04)}
+.side .row.r{border:1px solid #a3222a;background:rgba(208,42,51,.04)}
+.side .row:hover{background:rgba(255,255,255,.10)}
+.side .row span{display:flex;align-items:center;box-sizing:border-box;padding:0 6px;overflow:hidden;text-overflow:ellipsis}
+.side .row.g span+span{border-left:1px solid #1b7a3b}
+.side .row.r span+span{border-left:1px solid #a3222a}
+.side .rk{width:24px;justify-content:center;padding:0;opacity:.6;font-size:.85em}
+.side .tk{width:60px}
+.side .px{width:58px;justify-content:flex-end;font-variant-numeric:tabular-nums}
+.side .sc{flex:1;font-size:.92em}
+.side .pc{width:66px;justify-content:flex-end;font-variant-numeric:tabular-nums;font-weight:500}
+.side .row.g .pc{color:#22a04d}
+.side .row.r .pc{color:#d02a33}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
@@ -1118,7 +1123,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v13", path=str(d))
+        return components.declare_component("smz_bubbles_v14", path=str(d))
     except Exception:
         return None
 
