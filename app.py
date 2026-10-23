@@ -194,11 +194,11 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
-.tape{overflow:hidden;white-space:nowrap;border-top:1px solid #5c616b;border-bottom:1px solid #5c616b;background:#000;padding:7px 0;margin:2px 0 10px 0}
+.tape{overflow:hidden;white-space:nowrap;border-top:1px solid #5c616b;border-bottom:1px solid #5c616b;background:#000;padding:11px 0;margin:2px 0 14px 0}
 .tape-in{display:inline-block;animation:tapemove linear infinite}
 .tape:hover .tape-in{animation-play-state:paused}
 @keyframes tapemove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.tp-i{display:inline-flex;align-items:baseline;gap:8px;padding:0 18px;border-right:1px solid #2a2d33;font-size:.85rem;color:#c4c8cf}
+.tp-i{display:inline-flex;align-items:baseline;gap:10px;padding:0 30px;border-right:1px solid #2a2d33;font-size:1.05rem;color:#c4c8cf}
 .tp-i b{color:#e6e6e6;font-weight:700}
 .tp-i em{font-style:normal;font-weight:600}
 .nlist{margin-top:6px}
@@ -903,26 +903,34 @@ MARKET_TILES = [("S&P 500", "FOREXCOM:SPXUSD"), ("NASDAQ 100", "FOREXCOM:NSXUSD"
 
 HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
-.g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:2px}
-.c{height:__CH__px;border:1px solid #5c616b;border-radius:8px;overflow:hidden;background:#000}
-.c .tradingview-widget-container__widget{height:100%}
+.g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1cm;padding:0 calc(2.21cm - 16px)}
+.c{height:__CH__px;box-sizing:border-box;border:1px solid #5c616b;border-radius:8px;overflow:hidden;background:#000}
 </style></head><body><div class="g" id="g"></div><script>
 (function () {
-  var T = __TILES__;
-  T.forEach(function (t) {
-    var c = document.createElement("div"); c.className = "c tradingview-widget-container";
-    var w = document.createElement("div"); w.className = "tradingview-widget-container__widget"; c.appendChild(w);
-    document.getElementById("g").appendChild(c);
-    var s = document.createElement("script"); s.type = "text/javascript"; s.async = true;
-    s.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
-    s.innerHTML = JSON.stringify({symbols: [[t[0], t[1] + "|1D"]], chartOnly: false, width: "100%", height: "100%",
-      locale: "en", colorTheme: "dark", autosize: true, showVolume: false, showMA: false, hideDateRanges: true,
-      hideMarketStatus: true, hideSymbolLogo: true, scalePosition: "right", scaleMode: "Normal", fontFamily: "Arial, sans-serif",
-      fontSize: "10", noTimeScale: false, valuesTracking: "1", changeMode: "price-and-percent", chartType: "candlesticks",
-      upColor: "#30cc5a", downColor: "#f63538", borderUpColor: "#30cc5a", borderDownColor: "#f63538",
-      wickUpColor: "#30cc5a", wickDownColor: "#f63538", backgroundColor: "#000000", dateRanges: ["1d|5"]});
-    c.appendChild(s);
-  });
+  var T = __TILES__, CH = __CH__, timer = null, g = document.getElementById("g");
+  function build() {
+    g.innerHTML = "";
+    T.forEach(function (t, i) {
+      var c = document.createElement("div"); c.className = "c"; g.appendChild(c);
+      setTimeout(function () {
+        var w = Math.max(160, c.clientWidth - 2);
+        var box = document.createElement("div"); box.className = "tradingview-widget-container";
+        box.style.height = (CH - 2) + "px";
+        var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget";
+        box.appendChild(inner); c.appendChild(box);
+        var s = document.createElement("script"); s.type = "text/javascript"; s.async = true;
+        s.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+        s.innerHTML = JSON.stringify({autosize: false, width: w, height: CH - 2, symbol: t[1], interval: "D", range: "1M",
+          timezone: "America/New_York", theme: "dark", style: "1", locale: "en", backgroundColor: "#000000",
+          gridColor: "rgba(255,255,255,0.06)", hide_top_toolbar: true, hide_side_toolbar: true, hide_legend: false,
+          allow_symbol_change: false, save_image: false, withdateranges: false, details: false, calendar: false,
+          hotlist: false, hide_volume: true, support_host: "https://www.tradingview.com"});
+        box.appendChild(s);
+      }, i * 350);
+    });
+  }
+  build();
+  window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(build, 500); });
 })();
 </script></body></html>"""
 
@@ -1382,11 +1390,11 @@ def tape_html(day: pd.DataFrame) -> str:
             col, txt = (GREEN if g > 0 else RED if g < 0 else "#c4c8cf"), f"{g:+.2f}%"
         parts.append(f'<span class="tp-i"><b>{_h(t)}</b><span>{c:.2f}</span><em style="color:{col}">{txt}</em></span>')
     inner = "".join(parts)
-    dur = max(60, int(len(parts) * 1.6))
+    dur = max(120, int(len(parts) * 3.4))
     return f'<div class="tape"><div class="tape-in" style="animation-duration:{dur}s">{inner}{inner}</div></div>'
 
 
-def home_charts_doc(ch: int = 300) -> str:
+def home_charts_doc(ch: int = 330) -> str:
     tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
     return HOME_TEMPLATE.replace("__TILES__", tiles).replace("__CH__", str(int(ch)))
 
@@ -1394,7 +1402,7 @@ def home_charts_doc(ch: int = 300) -> str:
 def view_home(day: pd.DataFrame, meta: dict) -> list:
     """Home: ticker tape of all companies, then index / bitcoin / gold / oil / dollar charts."""
     st.markdown(tape_html(day), unsafe_allow_html=True)
-    render_iframe(home_charts_doc(300), 2 * 300 + 26)
+    render_iframe(home_charts_doc(330), 2 * 330 + 50)
     return []
 
 
