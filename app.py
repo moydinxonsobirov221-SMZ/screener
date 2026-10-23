@@ -185,6 +185,13 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
+.slist{margin-top:8px}
+.slist .r{display:grid;grid-template-columns:56px 130px 110px 1fr 120px;border:1px solid #ffffff;border-radius:3px;
+  margin-bottom:3px;font-size:.85rem;color:#e6e6e6}
+.slist .r span{padding:6px 12px;border-left:1px solid #ffffff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slist .r span:first-child{border-left:0;text-align:center;opacity:.7}
+.slist .r.h{font-size:.72rem;font-weight:600;color:#9a9a9a;border-color:#444}
+.slist .r.h span{border-left-color:#444}
 .st-key-secbox{border:1px solid #ffffff;border-radius:8px;padding:10px 12px 6px 12px;margin-top:6px}
 .st-key-secbox button{background:#000 !important;border:1px solid #333 !important;color:#e6e6e6 !important;
   min-height:30px;font-size:.78rem;padding:2px 6px}
@@ -1188,7 +1195,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v16", path=str(d))
+        return components.declare_component("smz_bubbles_v17", path=str(d))
     except Exception:
         return None
 
@@ -1321,9 +1328,9 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     nodes = payload["nodes"] if chosen == "All" else [n for n in payload["nodes"] if n["sector"] == chosen]
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
     if chosen == "All":
-        hint = "pick a sector in the box below to see its companies as rings"
+        hint = "pick a sector in the box below to enter it"
     else:
-        hint = f"{chosen}: biggest company on the outer ring, smallest in the centre"
+        hint = f"inside {chosen}"
     cap_col.caption(f"{len(nodes)} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
                     + f" | {hint} | drag the dial to turn it, click a stock to open its chart")
     comp = get_bubble_component()
@@ -1343,7 +1350,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     gainers = _rank(valid.nlargest(21, perf_col))
     losers = _rank(valid.nsmallest(21, perf_col))
     ev = comp(nodes=nodes, scale=scale, perf_label=label, gainers=gainers, losers=losers,
-              mode="all" if chosen == "All" else "onion", key="smz_bubbles", default=None)
+              mode="all", key="smz_bubbles", default=None)
 
     try:
         box = st.container(key="secbox")
@@ -1359,11 +1366,33 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
                 stretch(cols[j].button, "All sectors" if nm == "All" else nm, key=f"secbtn_{r0 + j}",
                         type="primary" if nm == chosen else "secondary", on_click=_pick_sector, args=(nm,))
 
+    if chosen != "All":
+        st.markdown(sector_list_html(day, chosen), unsafe_allow_html=True)
+
     if isinstance(ev, dict) and ev.get("ticker"):
         sym = clean_symbol(str(ev["ticker"]))
         if sym:
             return [(f"bubbles:{ev.get('n')}", sym)]
     return []
+
+
+def sector_list_html(day: pd.DataFrame, sector: str) -> str:
+    """Every stock of one sector as white-framed rows: ticker, price, sector, daily change."""
+    x = day[day["sector"] == sector].sort_values("mcap", ascending=False, na_position="last")
+    rows = ['<div class="slist"><div class="r h"><span>No.</span><span>Ticker</span><span>Price</span>'
+            '<span>Sector</span><span>Change</span></div>']
+    for i, (_, r) in enumerate(x.iterrows(), 1):
+        chg = r["chg"]
+        if pd.isna(chg):
+            ctxt, ccol = "-", "#e6e6e6"
+        else:
+            ctxt, ccol = f"{chg:+.2f}%", (GREEN if chg > 0 else RED if chg < 0 else "#e6e6e6")
+        price = "-" if pd.isna(r["close"]) else f"{r['close']:.2f}"
+        rows.append(f'<div class="r"><span>{i}</span><span>{html.escape(str(r["ticker"]))}</span>'
+                    f'<span>{price}</span><span>{html.escape(str(sector))}</span>'
+                    f'<span style="color:{ccol}">{ctxt}</span></div>')
+    rows.append("</div>")
+    return "".join(rows)
 
 
 def _sel(col, label, options, key, disabled=False):
