@@ -8,15 +8,17 @@ from __future__ import annotations
 import email.utils
 import html
 import json
+import os
 import re
 import sqlite3
 import tempfile
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -937,8 +939,16 @@ PERF_COLS = {"Today": "chg", "Week": "pw", "Month": "pm", "Quarter": "pq"}
 # =============================================================================
 # 2. DATA LAYER
 # =============================================================================
-@st.cache_data(ttl=3600, show_spinner="Calculating indicators...")
-def load_data() -> tuple[pd.DataFrame, dict]:
+def db_stamp() -> float:
+    """Modification time of the database file: a changed file means the cached data is reloaded."""
+    try:
+        return os.path.getmtime(DB_PATH)
+    except Exception:
+        return 0.0
+
+
+@st.cache_data(ttl=900, show_spinner="Calculating indicators...")
+def load_data(stamp: float = 0.0) -> tuple[pd.DataFrame, dict]:
     """Read prices/tickers/fund tables and compute all indicators for every ticker and day."""
     con = sqlite3.connect(DB_PATH)
     p = pd.read_sql("select * from prices", con)
@@ -1301,7 +1311,7 @@ def _corr_layout(p: pd.DataFrame, tickers: tuple, sectors: tuple, industries: tu
 @st.cache_data(ttl=3600, show_spinner=False)
 def corr_embedding(tickers: tuple, sectors: tuple, industries: tuple, upto: str) -> dict:
     """Cached wrapper: uses the price history already loaded for the screener."""
-    p, _ = load_data()
+    p, _ = load_data(db_stamp())
     return _corr_layout(p, tickers, sectors, industries, upto)
 
 
@@ -1388,90 +1398,123 @@ def view_home(day: pd.DataFrame, meta: dict) -> list:
     return []
 
 
-# ---- news --------------------------------------------------------------------
-def _iso_ts(v) -> float:
-    try:
-        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
-    except Exception:
-        return 0.0
+# ---- news (source: stockanalysis.com) ------------------------------------------
+_SA_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+          "Chrome/124.0 Safari/537.36")
+_SA_UNITS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800, "month": 2592000, "year": 31536000}
+_SA_AGO = r"(\d+|an?)\s+(second|minute|hour|day|week|month|year)s?\s+ago"
+_SA_ALL_URL = "https://stockanalysis.com/news/all-stocks/"
 
 
-def _norm_news(raw) -> list:
-    """Normalise yfinance news (old and new formats) to dicts: title, summary, provider, url, ts, thumb."""
+def _sa_get(url: str) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": _SA_UA, "Accept": "text/html,application/xhtml+xml",
+                                               "Accept-Language": "en-US,en;q=0.9"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        return r.read().decode("utf-8", "ignore")
+
+
+def _txt(s: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s))).strip()
+
+
+def _parse_sa_news(page: str) -> list:
+    """Parse the news list of a stockanalysis.com page: thumbnail, title, summary, symbols, '3 hours ago - Source'."""
+    now = time.time()
+    parts = re.split(r"<h3\b", page, flags=re.I)
     out = []
-    for n in raw or []:
-        try:
-            c = n.get("content") if isinstance(n.get("content"), dict) else None
-            if c:
-                title, summ = c.get("title") or "", c.get("summary") or c.get("description") or ""
-                prov = (c.get("provider") or {}).get("displayName") or ""
-                url = (c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url") or ""
-                ts, th = _iso_ts(c.get("pubDate") or c.get("displayTime")), c.get("thumbnail") or {}
-            else:
-                title, summ, prov = n.get("title") or "", n.get("summary") or "", n.get("publisher") or ""
-                url, ts, th = n.get("link") or "", float(n.get("providerPublishTime") or 0), n.get("thumbnail") or {}
-            if not title:
-                continue
-            thumb = ""
-            res = sorted(th.get("resolutions") or [], key=lambda r: r.get("width") or 0)
-            if res:
-                big = [r for r in res if (r.get("width") or 0) >= 300]
-                thumb = (big[0] if big else res[-1]).get("url") or ""
-            thumb = thumb or th.get("originalUrl") or ""
-            summ = re.sub(r"<[^>]+>", " ", summ)
-            summ = re.sub(r"\s+", " ", summ).strip()
-            out.append(dict(title=title, summary=summ[:260], provider=prov, url=url, ts=ts, thumb=thumb))
-        except Exception:
+    for i in range(1, len(parts)):
+        prev, cur = parts[i - 1], parts[i]
+        end = cur.find("</h3>")
+        if end < 0:
             continue
+        head, body = cur[:end], cur[end + 5:]
+        head = head[head.find(">") + 1:]
+        title = _txt(head)
+        if not title:
+            continue
+        m = re.search(r'href="([^"]+)"', head)
+        url = html.unescape(m.group(1)) if m else ""
+        text = html.unescape(re.sub(r"<[^>]+>", "\n", body))
+        mm = re.search(_SA_AGO + r"\s*-?\s*([^\n]*)", text, re.I)
+        if not mm:
+            continue
+        n = 1 if mm.group(1).lower() in ("a", "an") else int(mm.group(1))
+        ts = now - n * _SA_UNITS[mm.group(2).lower()]
+        source = mm.group(3).strip()
+        if not source:
+            rest = [ln.strip(" -\t") for ln in text[mm.end():].split("\n") if ln.strip(" -\t")]
+            source = rest[0] if rest else ""
+        cut = re.search(_SA_AGO, body, re.I)
+        pre = body[:cut.start()] if cut else body[:3000]
+        syms = [x.upper() for x in re.findall(r'href="(?:https?://stockanalysis\.com)?/(?:stocks|etf)/([A-Za-z0-9.\-]+)/?"', pre)]
+        summary = ""
+        for ln in (x.strip() for x in text[:mm.start()].split("\n")):
+            if len(ln) >= 20 and ln != title and not ln.startswith(("Other symbols", "Stocks:")):
+                summary = ln
+                break
+        tail = prev[-3000:]
+        ago = list(re.finditer(r"\bago\b", tail))
+        tail = tail[ago[-1].end():] if ago else tail
+        imgs = [html.unescape(x) for x in re.findall(r'<img\b[^>]*?\b(?:src|data-src)="([^"]+)"', tail)]
+        imgs = [x for x in imgs if x.startswith("http") and "stockanalysis.com" not in x and not x.endswith(".svg")]
+        out.append(dict(title=title, summary=summary[:260], provider=source, url=url, ts=ts,
+                        thumb=imgs[-1] if imgs else "", syms=list(dict.fromkeys(syms))))
     return out
 
 
-def _rss_news(t: str) -> list:
-    try:
-        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(t)}&region=US&lang=en-US"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            root = ET.fromstring(r.read())
-        out = []
-        for it in root.iter("item"):
-            try:
-                ts = email.utils.parsedate_to_datetime(it.findtext("pubDate") or "").timestamp()
-            except Exception:
-                ts = 0.0
-            summ = re.sub(r"<[^>]+>", " ", it.findtext("description") or "").strip()
-            out.append(dict(title=it.findtext("title") or "", summary=summ[:260], provider="Yahoo Finance",
-                            url=it.findtext("link") or "", ts=ts, thumb=""))
-        return [o for o in out if o["title"]]
-    except Exception:
-        return []
+def _fetch_sa_stock(t: str):
+    sym = t.lower().replace("-", ".")
+    if not re.fullmatch(r"[a-z0-9]+(\.[a-z])?", sym):
+        return None
+    for kind in ("stocks", "etf"):
+        try:
+            page = _sa_get(f"https://stockanalysis.com/{kind}/{sym}/")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            raise
+        items = _parse_sa_news(page)
+        for it in items:
+            if t not in it["syms"]:
+                it["syms"].insert(0, t)
+        return items
+    return []
 
 
-def _fetch_news_one(t: str) -> list:
-    try:
-        import yfinance as yf
-    except Exception:
-        return _rss_news(t)
-    try:
-        return _norm_news(yf.Ticker(t).news)
-    except Exception:
-        return _rss_news(t)
-
-
-@st.cache_data(ttl=1200, show_spinner="Loading company news...")
+@st.cache_data(ttl=1200, show_spinner="Loading company news from stockanalysis.com...")
 def load_company_news(tickers: tuple) -> dict:
-    res: dict = {}
-    ex = ThreadPoolExecutor(max_workers=8)
-    futs = {ex.submit(_fetch_news_one, t): t for t in tickers}
+    arts: dict = {}
+    stats = {"ok": 0, "fail": 0, "err": "", "parsed": 0}
+
+    def merge(items):
+        for it in items:
+            a = arts.setdefault(it["url"] or it["title"], {**it, "syms": []})
+            for x in it["syms"]:
+                if x not in a["syms"]:
+                    a["syms"].append(x)
+
     try:
-        for f in as_completed(futs, timeout=240):
+        merge(_parse_sa_news(_sa_get(_SA_ALL_URL)))
+    except Exception as e:  # noqa: BLE001
+        stats["err"] = f"{type(e).__name__}: {e}"
+    ex = ThreadPoolExecutor(max_workers=8)
+    futs = {ex.submit(_fetch_sa_stock, t): t for t in tickers}
+    try:
+        for f in as_completed(futs, timeout=300):
             try:
-                res[futs[f]] = f.result()
-            except Exception:
-                res[futs[f]] = []
+                items = f.result()
+                if items is None:
+                    continue
+                stats["ok"] += 1
+                stats["parsed"] += len(items)
+                merge(items)
+            except Exception as e:  # noqa: BLE001
+                stats["fail"] += 1
+                stats["err"] = stats["err"] or f"{type(e).__name__}: {e}"
     except Exception:
         pass
     ex.shutdown(wait=False, cancel_futures=True)
-    return res
+    return {"arts": list(arts.values()), **stats}
 
 
 def _ago(ts: float) -> str:
@@ -1511,36 +1554,39 @@ def news_card_html(a: dict, chg: dict) -> str:
 
 def company_news(day: pd.DataFrame) -> None:
     top = st.columns([1.2, 6.8])
-    period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=1, key="news_period")
+    period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=0, key="news_period")
     hours = {"24 hours": 24, "48 hours": 48, "7 days": 168}[period]
     tickers = tuple(sorted(day["ticker"].dropna().unique()))
     data = load_company_news(tickers)
     cut = time.time() - hours * 3600
     chg = dict(zip(day["ticker"], day["chg"]))
-    arts: dict = {}
-    for t, items in data.items():
-        for it in items:
-            if it["ts"] < cut:
-                continue
-            a = arts.setdefault(it["url"] or it["title"], {**it, "syms": []})
-            if t not in a["syms"]:
-                a["syms"].append(t)
-    covered = {t for a in arts.values() for t in a["syms"]}
-    pct = len(covered) / max(len(tickers), 1) * 100
-    top[1].caption(f"{len(covered)} of {len(tickers)} stocks ({pct:.0f}%) have news in the last {period} "
-                   "| biggest movers first")
-    if not arts:
-        st.info("No company news found for this period. The news source may be busy, try again in a few minutes.")
-        return
+    arts = []
+    for a in data["arts"]:
+        if a["ts"] < cut:
+            continue
+        mine = [t for t in a["syms"] if t in chg]
+        if not mine:
+            continue
+        arts.append({**a, "mine": mine})
 
     def score(t) -> float:
         v = chg.get(t)
         return 0.0 if v is None or pd.isna(v) else abs(float(v))
 
-    for a in arts.values():
-        a["syms"].sort(key=lambda t: -score(t))
-        a["main"] = a["syms"][0]
-    ranked = sorted(arts.values(), key=lambda a: (-score(a["main"]), -a["ts"]))[:80]
+    for a in arts:
+        a["mine"].sort(key=lambda t: -score(t))
+        a["main"] = a["mine"][0]
+        a["syms"] = [a["main"]] + [t for t in a["syms"] if t != a["main"]]
+    covered = {t for a in arts for t in a["mine"]}
+    pct = len(covered) / max(len(tickers), 1) * 100
+    top[1].caption(f"{len(covered)} of {len(tickers)} stocks ({pct:.0f}%) have news in the last {period} "
+                   f"| biggest movers first | source: stockanalysis.com ({data['ok']} pages loaded)")
+    if not arts:
+        why = f" Last error: {data['err']}." if data.get("err") else ""
+        st.info("No company news found for this period. "
+                f"stockanalysis.com pages loaded: {data['ok']}, failed: {data['fail']}, news items parsed: {data['parsed']}.{why}")
+        return
+    ranked = sorted(arts, key=lambda a: (-score(a["main"]), -a["ts"]))[:100]
     st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in ranked) + "</div>",
                 unsafe_allow_html=True)
 
@@ -1787,15 +1833,34 @@ def header(dates: list) -> tuple[str, Optional[str]]:
     return view or "Home", forced
 
 
+def expected_session() -> Optional[str]:
+    """Last US trading day that should already be in the database (weekends only, holidays ignored)."""
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("America/New_York"))
+    except Exception:
+        return None
+    d = now.date()
+    if now.weekday() >= 5 or now.hour * 60 + now.minute < 16 * 60 + 30:
+        d -= timedelta(days=1)
+        while d.weekday() >= 5:
+            d -= timedelta(days=1)
+    return d.isoformat()
+
+
 def main() -> None:
     st.set_page_config(layout="wide", page_title=PAGE_TITLE, page_icon="📈", initial_sidebar_state="collapsed",
                        menu_items={"Get help": None, "Report a bug": None, "About": None})
     inject_header()
     init_state()
-    p, meta = load_data()
+    p, meta = load_data(db_stamp())
     dates = sorted(p["date"].unique(), reverse=True)
 
     view, forced = header(dates)
+    exp = expected_session()
+    if exp and dates and str(dates[0]) < exp:
+        st.caption(f"\u26a0 The database ends at {dates[0]}, but the market already traded {exp}. "
+                   "The data updater has not loaded the newer session yet.")
     day = p[p["date"] == S["date"]]
     if view == "Home":
         items = view_home(day, meta)
