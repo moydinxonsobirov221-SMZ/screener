@@ -744,12 +744,14 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       });
     });
 
-    /* ---- centre hub (does not turn) ---- */
-    svg.append("circle").attr("r", hubR).attr("fill", "#000000").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
-      .attr("stroke-width", 2.6).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
-    svg.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
-      .attr("font-size", hubR * 0.5).attr("font-weight", 800).attr("fill", "#ffffff").attr("letter-spacing", 0.4)
-      .attr("pointer-events", "none").text("S.M.Z");
+    /* ---- centre hub (does not turn): only when several sectors are shown ---- */
+    if (n > 1) {
+      svg.append("circle").attr("r", hubR).attr("fill", "#000000").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+        .attr("stroke-width", 2.6).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
+      svg.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+        .attr("font-size", hubR * 0.5).attr("font-weight", 800).attr("fill", "#ffffff").attr("letter-spacing", 0.4)
+        .attr("pointer-events", "none").text("S.M.Z");
+    }
 
     /* ---- fixed index mark at the top (does not turn), like on a safe dial ---- */
     svg.append("path").attr("d", "M -6 " + (-R3 - 8) + " L 6 " + (-R3 - 8) + " L 0 " + (-R3 + 7) + " Z")
@@ -1277,7 +1279,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v20", path=str(d))
+        return components.declare_component("smz_bubbles_v21", path=str(d))
     except Exception:
         return None
 
