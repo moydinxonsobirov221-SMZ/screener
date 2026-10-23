@@ -194,6 +194,7 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
+.smz-foot{position:fixed;left:16px;bottom:8px;font-size:.8rem;color:#8b95a5;z-index:5}
 .tape{overflow:hidden;white-space:nowrap;border-top:1px solid #5c616b;border-bottom:1px solid #5c616b;background:#000;padding:11px 0;margin:2px 0 14px 0}
 .tape-in{display:inline-block;animation:tapemove linear infinite}
 .tape:hover .tape-in{animation-play-state:paused}
@@ -900,17 +901,18 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
 
 MARKET_TILES = [("S&P 500", "FOREXCOM:SPXUSD"), ("NASDAQ 100", "FOREXCOM:NSXUSD"), ("DOW 30", "FOREXCOM:DJI"),
-                ("RUSSELL 2000 ETF", "AMEX:IWM"), ("BITCOIN", "BITSTAMP:BTCUSD"), ("GOLD XAUUSD", "OANDA:XAUUSD"),
-                ("OIL WTI", "TVC:USOIL"), ("DOLLAR INDEX", "CAPITALCOM:DXY")]
+                ("RUSSELL 2000", "AMEX:IWM"), ("BITCOIN", "BITSTAMP:BTCUSD"), ("GOLD", "OANDA:XAUUSD"),
+                ("OIL WTI", "TVC:USOIL"), ("DOLLAR", "CAPITALCOM:DXY")]
 
 HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
 .g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1cm;padding:0 calc(2.21cm - 16px)}
 .c{height:__CH__px;box-sizing:border-box;border:1px solid #5c616b;border-radius:8px;overflow:hidden;background:#000}
-.h{height:22px;line-height:22px;padding:0 10px;font-size:12px;font-weight:700;letter-spacing:.3px;color:#e6e6e6;white-space:nowrap;overflow:hidden}
+.h{height:22px;line-height:22px;padding:0 10px;font-size:11px;font-weight:700;letter-spacing:.2px;color:#e6e6e6;white-space:nowrap;overflow:hidden}
+.h .chg{margin-left:2cm}
 </style></head><body><div class="g" id="g"></div><script>
 (function () {
-  var T = __TILES__, CH0 = __CH__, CH = CH0, HEAD = 22, timer = null, g = document.getElementById("g");
+  var CHG = __CHG__, T = __TILES__, CH0 = __CH__, CH = CH0, HEAD = 22, timer = null, g = document.getElementById("g");
   function fit() {
     try {
       var ph = window.parent.innerHeight, fe = window.frameElement, top = 126;
@@ -924,7 +926,13 @@ html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,H
     g.innerHTML = "";
     T.forEach(function (t, i) {
       var c = document.createElement("div"); c.className = "c"; c.style.height = CH + "px"; g.appendChild(c);
-      var h = document.createElement("div"); h.className = "h"; h.textContent = t[0]; c.appendChild(h);
+      var h = document.createElement("div"); h.className = "h";
+      var nm = document.createElement("span"); nm.textContent = t[0]; h.appendChild(nm);
+      var v = CHG[t[1]], ch = document.createElement("span"); ch.className = "chg";
+      if (typeof v === "number") {
+        ch.textContent = (v > 0 ? "+" : "") + v.toFixed(2) + "%"; ch.style.color = v > 0 ? "#30cc5a" : (v < 0 ? "#f63538" : "#c4c8cf");
+      } else { ch.textContent = "-"; ch.style.color = "#8b95a5"; }
+      h.appendChild(ch); c.appendChild(h);
       setTimeout(function () {
         var box = document.createElement("div"); box.className = "tradingview-widget-container";
         box.style.height = (CH - 2 - HEAD) + "px"; box.style.width = "100%";
@@ -1408,9 +1416,34 @@ def tape_html(day: pd.DataFrame) -> str:
     return f'<div class="tape"><div class="tape-in" style="animation-duration:{dur}s">{inner}{inner}</div></div>'
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def market_changes(symbols: tuple) -> dict:
+    """Today's change in % vs yesterday's close for each chart symbol (TradingView scanner, best effort)."""
+    out: dict = {}
+    for market in ("cfd", "global", "america", "crypto", "forex"):
+        todo = [x for x in symbols if x not in out]
+        if not todo:
+            break
+        try:
+            body = json.dumps({"symbols": {"tickers": todo, "query": {"types": []}},
+                               "columns": ["close", "change"]}).encode()
+            req = urllib.request.Request(f"https://scanner.tradingview.com/{market}/scan", data=body,
+                                         headers={"User-Agent": _SA_UA, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                data = json.loads(r.read().decode("utf-8", "ignore"))
+            for row in data.get("data", []):
+                d = row.get("d") or []
+                if len(d) >= 2 and d[1] is not None:
+                    out[row["s"]] = float(d[1])
+        except Exception:
+            continue
+    return out
+
+
 def home_charts_doc(ch: int = 220) -> str:
     tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
-    return HOME_TEMPLATE.replace("__TILES__", tiles).replace("__CH__", str(int(ch)))
+    chg = json.dumps(market_changes(tuple(sym for _, sym in MARKET_TILES)))
+    return (HOME_TEMPLATE.replace("__CHG__", chg).replace("__TILES__", tiles).replace("__CH__", str(int(ch))))
 
 
 def view_home(day: pd.DataFrame, meta: dict) -> list:
@@ -1894,7 +1927,11 @@ def main() -> None:
         items = view_screener(day, meta)
 
     to_open, S["opened"] = decide_open(items, S.get("opened"), forced)
-    st.caption(f"© {BRAND} | For informational purposes only.")
+    foot = f"© {BRAND} | For informational purposes only."
+    if view == "Home":
+        st.markdown(f'<div class="smz-foot">{foot}</div>', unsafe_allow_html=True)
+    else:
+        st.caption(foot)
     inject_seo()
     if to_open:
         r = day[day["ticker"] == to_open]
