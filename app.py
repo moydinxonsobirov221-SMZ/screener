@@ -264,11 +264,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side{position:fixed;display:none;z-index:5;font-size:12px}
 .side .hd{font-weight:700;font-size:12px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
 .side .hd.g{color:#34b560}.side .hd.r{color:#e0434f}
-.side .row{display:flex;align-items:center;margin-bottom:1px;padding:0 8px;border-radius:2px;color:#fff;font-weight:700;
-  cursor:pointer;overflow:hidden;white-space:nowrap}
-.side .row:hover{outline:1.5px solid rgba(255,255,255,.8);outline-offset:-1.5px}
-.side .rk{width:20px;opacity:.65;font-weight:600;font-size:.85em}
-.side .tk{flex:1;overflow:hidden;text-overflow:ellipsis}
+.side .row{display:flex;align-items:center;box-sizing:border-box;margin-bottom:2px;padding:0 8px;border-radius:3px;
+  font-weight:700;cursor:pointer;overflow:hidden;white-space:nowrap}
+.side .row.g{color:#30cc5a;border:1px solid #30cc5a;background:rgba(48,204,90,.07)}
+.side .row.r{color:#f63538;border:1px solid #f63538;background:rgba(246,53,56,.07)}
+.side .row:hover{background:rgba(255,255,255,.12)}
+.side .rk{width:18px;opacity:.65;font-weight:600;font-size:.85em}
+.side .tk{width:52px;overflow:hidden;text-overflow:ellipsis}
+.side .px{width:52px;text-align:right;font-variant-numeric:tabular-nums;margin-right:8px}
+.side .sc{flex:1;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:.88em;opacity:.9}
 .side .pc{margin-left:6px;font-variant-numeric:tabular-nums}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
@@ -693,24 +697,31 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         if (Math.abs(vel) > 25 && performance.now() - lastMoveT < 90) { startInertia(); }
       }));
 
-    /* ---- Top 21 gainers (left) and Top 21 losers (right), 2.1 cm (~79 px) away from the dial ---- */
+    /* ---- Top 21 gainers (left) and Top 21 losers (right): ticker, price, sector, change ---- */
     var cellByT = {};
     cells.each(function (d) { cellByT[d.d.ticker] = this; });
     (function () {
-      var side = W / 2 - R3, gap = 79;
-      if (side - gap < 110) { gap = Math.max(14, side - 110); }
-      var wl = clamp(96, 190, side - gap - 6);
+      var side = W / 2 - R3, gap = 79, minW = 215;
+      if (side - gap < minW) { gap = Math.max(8, side - minW - 6); }
+      var wl = clamp(minW, 320, side - gap - 6);
       var top = 44, bottomRes = 52, avail = H - top - bottomRes;
-      var rh = clamp(16, 27, (avail - 26) / 21), total = 26 + 21 * rh;
+      var rh = clamp(16, 27, (avail - 26) / 21 - 2), total = 26 + 21 * (rh + 2);
       var y0 = top + Math.max(0, (avail - total) / 2);
+      var SEC = {"Information Technology": "Info Tech", "Consumer Discretionary": "Cons. Disc.",
+                 "Consumer Staples": "Cons. Staples", "Communication Services": "Comm. Svcs",
+                 "Health Care": "Health Care", "Real Estate": "Real Estate"};
       function fill(id, rows, title, isGain, x) {
         var el = document.getElementById(id);
-        el.style.left = Math.max(2, x) + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
-        el.style.fontSize = clamp(10, 12.5, rh * 0.56) + "px";
+        x = clamp(2, Math.max(2, W - wl - 2), x);
+        el.style.left = x + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
+        el.style.fontSize = clamp(9.5, 12, rh * 0.5) + "px";
         var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>";
         (rows || []).slice(0, 21).forEach(function (r, i) {
-          h += "<div class=\"row\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px;background:" + color(r.perf) + "\"><span class=\"rk\">" +
-            (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span><span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
+          h += "<div class=\"row " + (isGain ? "g" : "r") + "\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px\">" +
+            "<span class=\"rk\">" + (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span>" +
+            "<span class=\"px\">" + (+r.price).toFixed(2) + "</span>" +
+            "<span class=\"sc\">" + esc(SEC[r.sector] || r.sector || "-") + "</span>" +
+            "<span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
         });
         el.innerHTML = h;
         Array.prototype.forEach.call(el.querySelectorAll(".row"), function (row) {
@@ -1107,7 +1118,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v12", path=str(d))
+        return components.declare_component("smz_bubbles_v13", path=str(d))
     except Exception:
         return None
 
@@ -1176,8 +1187,8 @@ def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_indust
 # =============================================================================
 # 6. VIEWS
 # =============================================================================
-def view_overview(day: pd.DataFrame, meta: dict) -> list:
-    """Market overview: KPIs, breadth bar and top lists (the stock map lives in the Bubbles tab)."""
+def view_stats(day: pd.DataFrame, meta: dict) -> list:
+    """Market statistics: KPIs, breadth bar and top lists."""
     items: list = []
     st.markdown(kpi_html(day), unsafe_allow_html=True)
 
@@ -1204,6 +1215,14 @@ def view_overview(day: pd.DataFrame, meta: dict) -> list:
     return items
 
 
+def view_overview(day: pd.DataFrame, meta: dict) -> list:
+    """Overview = bubble map first; KPIs and top lists are tucked below in a collapsed block."""
+    items = list(view_bubbles(day, meta))
+    with st.expander("Market overview (KPIs & top lists)", expanded=False):
+        items += view_stats(day, meta)
+    return items
+
+
 def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     """Radial bubble map: white circle split into sector wedges, company bubbles sized by market cap
     and colored by performance (green/red, 5% steps)."""
@@ -1226,7 +1245,8 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     valid = day.dropna(subset=[perf_col])
 
     def _rank(df: pd.DataFrame) -> list:
-        return [dict(ticker=str(r["ticker"]), perf=float(r[perf_col]), price=float(r["close"]))
+        return [dict(ticker=str(r["ticker"]), perf=float(r[perf_col]), price=float(r["close"]),
+                     sector=str(r["sector"]) if pd.notna(r["sector"]) else "-")
                 for _, r in df.iterrows()]
 
     gainers = _rank(valid.nlargest(21, perf_col))
@@ -1345,7 +1365,7 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
 # =============================================================================
 def header(dates: list) -> tuple[str, Optional[str]]:
     c = st.columns([1.6, 1.0, 3.4])
-    opts = ["Overview", "Screener", "Bubbles"]
+    opts = ["Overview", "Screener"]
     with c[0]:
         if hasattr(st, "segmented_control"):
             view = st.segmented_control("View", opts, default="Overview", key="view", label_visibility="collapsed")
@@ -1377,8 +1397,6 @@ def main() -> None:
     day = p[p["date"] == S["date"]]
     if view == "Overview":
         items = view_overview(day, meta)
-    elif view == "Bubbles":
-        items = view_bubbles(day, meta)
     else:
         items = view_screener(day, meta)
 
