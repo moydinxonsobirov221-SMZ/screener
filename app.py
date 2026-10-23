@@ -306,21 +306,19 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #snd.off{background:#c0242f}
 #snd:hover{filter:brightness(1.15)}
 .side{position:fixed;display:none;z-index:5;font-size:12px}
-.side .hd{font-weight:700;font-size:12px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
+.side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
 .side .hd.g{color:#22a04d}.side .hd.r{color:#d02a33}
 .side .row{display:flex;align-items:stretch;box-sizing:border-box;margin-bottom:2px;padding:0;border-radius:3px;
   font-weight:400;color:#e6e6e6;cursor:pointer;overflow:hidden;white-space:nowrap;line-height:1}
-.side .row.g{border:1px solid #1b7a3b;background:rgba(34,160,77,.04)}
-.side .row.r{border:1px solid #a3222a;background:rgba(208,42,51,.04)}
+.side .row.g,.side .row.r{border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.03)}
 .side .row:hover{background:rgba(255,255,255,.10)}
-.side .row span{display:flex;align-items:center;box-sizing:border-box;padding:0 6px;overflow:hidden;text-overflow:ellipsis}
-.side .row.g span+span{border-left:1px solid #1b7a3b}
-.side .row.r span+span{border-left:1px solid #a3222a}
-.side .rk{width:24px;justify-content:center;padding:0;opacity:.6;font-size:.85em}
-.side .tk{width:60px}
-.side .px{width:58px;justify-content:flex-end;font-variant-numeric:tabular-nums}
+.side .row span{display:flex;align-items:center;box-sizing:border-box;padding:0 8px;overflow:hidden;text-overflow:ellipsis}
+.side .row span+span{border-left:1px solid rgba(255,255,255,.5)}
+.side .rk{width:30px;justify-content:center;padding:0;opacity:.6;font-size:.85em}
+.side .tk{width:74px}
+.side .px{width:68px;justify-content:flex-end;font-variant-numeric:tabular-nums}
 .side .sc{flex:1;font-size:.92em}
-.side .pc{width:66px;justify-content:flex-end;font-variant-numeric:tabular-nums;font-weight:500}
+.side .pc{width:84px;justify-content:flex-end;font-variant-numeric:tabular-nums;font-weight:500}
 .side .row.g .pc{color:#22a04d}
 .side .row.r .pc{color:#d02a33}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
@@ -345,7 +343,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   function frameH() {
     var ph = 0;
     try { ph = window.parent.innerHeight; } catch (e) {}
-    return clamp(420, 920, (ph || 900) - 245);
+    return clamp(480, 960, (ph || 900) - 200);
   }
   function showMsg(t) {
     var m = document.getElementById("msg");
@@ -811,11 +809,11 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var cellByT = {};
     cells.each(function (d) { cellByT[d.d.ticker] = this; });
     (function () {
-      var side = W / 2 - R3, gap = 79, minW = 215;
+      var side = W / 2 - R3, gap = 79, minW = 270;
       if (side - gap < minW) { gap = Math.max(8, side - minW - 6); }
-      var wl = clamp(minW, 320, side - gap - 6);
+      var wl = clamp(minW, 380, side - gap - 6);
       var top = 44, bottomRes = 52, avail = H - top - bottomRes;
-      var rh = clamp(16, 27, (avail - 26) / 21 - 2), total = 26 + 21 * (rh + 2);
+      var rh = clamp(18, 32, (avail - 26) / 21 - 2), total = 26 + 21 * (rh + 2);
       var y0 = top + Math.max(0, (avail - total) / 2);
       var SEC = {"Information Technology": "Info Tech", "Consumer Discretionary": "Cons. Disc.",
                  "Consumer Staples": "Cons. Staples", "Communication Services": "Comm. Svcs",
@@ -824,7 +822,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         var el = document.getElementById(id);
         x = clamp(2, Math.max(2, W - wl - 2), x);
         el.style.left = x + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
-        el.style.fontSize = clamp(9.5, 12, rh * 0.5) + "px";
+        el.style.fontSize = clamp(11, 14, rh * 0.58) + "px";
         var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>";
         (rows || []).slice(0, 21).forEach(function (r, i) {
           h += "<div class=\"row " + (isGain ? "g" : "r") + "\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px\">" +
@@ -1299,7 +1297,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v21", path=str(d))
+        return components.declare_component("smz_bubbles_v22", path=str(d))
     except Exception:
         return None
 
