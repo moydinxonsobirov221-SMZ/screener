@@ -185,6 +185,12 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
+.st-key-secbox{border:1px solid #ffffff;border-radius:8px;padding:10px 12px 6px 12px;margin-top:6px}
+.st-key-secbox button{background:#000 !important;border:1px solid #333 !important;color:#e6e6e6 !important;
+  min-height:30px;font-size:.78rem;padding:2px 6px}
+.st-key-secbox button:hover{border-color:#fff !important}
+.st-key-secbox [data-testid="stBaseButton-primary"]{background:#ffffff !important;color:#000 !important;
+  border-color:#ffffff !important;font-weight:700}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -525,7 +531,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
-    var key = JSON.stringify([a.nodes, a.scale, a.perf_label, a.gainers, a.losers]) + "|" + W + "|" + H;
+    var key = JSON.stringify([a.nodes, a.scale, a.perf_label, a.gainers, a.losers, a.mode]) + "|" + W + "|" + H;
     if (!force && key === lastKey) { return; }
     lastKey = key;
     setHeight(H);
@@ -563,8 +569,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       g.a0 = cur; g.a1 = cur + angs[i]; g.am = (g.a0 + g.a1) / 2; g.full = n === 1; cur = g.a1;
     });
 
-    /* ---- onion layers: inside every sector the biggest company is the outer layer, the smallest sits at the centre ---- */
+    var onion = a.mode === "onion";
+    function bandPath(d) {
+      var large = (d.a1 - d.a0) > Math.PI ? 1 : 0;
+      var P = function (r, an) { return (r * Math.cos(an)).toFixed(2) + "," + (r * Math.sin(an)).toFixed(2); };
+      return "M" + P(d.ro, d.a0) + "A" + d.ro.toFixed(2) + "," + d.ro.toFixed(2) + " 0 " + large + " 1 " + P(d.ro, d.a1) +
+        "L" + P(d.ri, d.a1) + "A" + d.ri.toFixed(2) + "," + d.ri.toFixed(2) + " 0 " + large + " 0 " + P(d.ri, d.a0) + "Z";
+    }
     var cvm = document.createElement("canvas").getContext("2d");
+    if (onion) {
     var rIn0 = hubR + 3;
     groups.forEach(function (g) {
       var its = g.items, m = its.length, total = R - rIn0, minT = Math.min(3, total / m);
@@ -584,11 +597,10 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         it.a0 = g.a0; it.a1 = g.full ? g.a0 + 2 * Math.PI - 0.0002 : g.a1;
       });
     });
-    function bandPath(d) {
-      var large = (d.a1 - d.a0) > Math.PI ? 1 : 0;
-      var P = function (r, an) { return (r * Math.cos(an)).toFixed(2) + "," + (r * Math.sin(an)).toFixed(2); };
-      return "M" + P(d.ro, d.a0) + "A" + d.ro.toFixed(2) + "," + d.ro.toFixed(2) + " 0 " + large + " 1 " + P(d.ro, d.a1) +
-        "L" + P(d.ri, d.a1) + "A" + d.ri.toFixed(2) + "," + d.ri.toFixed(2) + " 0 " + large + " 0 " + P(d.ri, d.a0) + "Z";
+    } else {
+      var geoErr = 0;
+      groups.forEach(function (g) { geoErr = Math.max(geoErr, voronoiSector(g, R)); });
+      window.__geoErr = geoErr;
     }
 
     var defs = svg.append("defs");
@@ -618,29 +630,51 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var all = [];
     groups.forEach(function (g) { g.items.forEach(function (it) { it.sector = g.name; all.push(it); }); });
     var cells = rg.append("g").selectAll("path").data(all).join("path").attr("class", "leaf")
-      .attr("d", bandPath)
+      .attr("d", function (d) {
+        return onion ? bandPath(d) : "M" + d.poly.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join("L") + "Z";
+      })
       .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.2)
       .attr("stroke-linejoin", "round").style(NS, "non-scaling-stroke");
     rg.append("circle").attr("r", R).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").attr("pointer-events", "none");
-    var lblg = rg.append("g").attr("pointer-events", "none");
-    all.forEach(function (d, idx) {
-      var span = d.a1 - d.a0, rmid = (d.ro + d.ri) / 2, tk = d.d.ticker, pc = fmtPct(d.d.perf);
-      var fs = clamp(6, 15, d.th * 0.58), avail = span * rmid * 0.94, txt = null;
-      function wOf(t, f) { cvm.font = "700 " + f + "px Arial"; return cvm.measureText(t).width; }
-      if (d.th >= 8) {
-        if (wOf(tk + "  " + pc, fs) <= avail) { txt = tk + "  " + pc; }
-        else if (wOf(tk, fs) <= avail) { txt = tk; }
-        else { var f2 = fs * avail / wOf(tk, fs); if (f2 >= 6) { fs = f2; txt = tk; } }
-      }
-      if (!txt) { return; }
-      var w = wOf(txt, fs), rb = rmid - fs * 0.35, mid = (d.a0 + d.a1) / 2, hh = Math.min(span / 2, (w / 2 + 6) / rb);
-      var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
-      var id = "lp" + idx;
-      defs.append("path").attr("id", id).attr("d", "M " + P(mid - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(mid + hh));
-      lblg.append("text").attr("class", "t").attr("font-size", fs)
-        .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle").text(txt);
-    });
+    var labs = null;
+    if (onion) {
+      var lblg = rg.append("g").attr("pointer-events", "none");
+      all.forEach(function (d, idx) {
+        var span = d.a1 - d.a0, rmid = (d.ro + d.ri) / 2, tk = d.d.ticker, pc = fmtPct(d.d.perf);
+        var fs = clamp(6, 15, d.th * 0.58), avail = span * rmid * 0.94, txt = null;
+        function wOf(t, f) { cvm.font = "700 " + f + "px Arial"; return cvm.measureText(t).width; }
+        if (d.th >= 8) {
+          if (wOf(tk + "  " + pc, fs) <= avail) { txt = tk + "  " + pc; }
+          else if (wOf(tk, fs) <= avail) { txt = tk; }
+          else { var f2 = fs * avail / wOf(tk, fs); if (f2 >= 6) { fs = f2; txt = tk; } }
+        }
+        if (!txt) { return; }
+        var w = wOf(txt, fs), rb = rmid - fs * 0.35, hh = Math.min(span / 2, (w / 2 + 6) / rb);
+        var P = function (q) { return (rb * Math.cos(q)).toFixed(2) + " " + (rb * Math.sin(q)).toFixed(2); };
+        var reps = clamp(1, 6, Math.floor(span * rmid / (w * 2.4))), j;
+        for (j = 0; j < reps; j++) {
+          var mid = d.a0 + (j + 0.5) * span / reps, id = "lp" + idx + "_" + j;
+          defs.append("path").attr("id", id).attr("d", "M " + P(mid - hh) + " A " + rb + " " + rb + " 0 0 1 " + P(mid + hh));
+          lblg.append("text").attr("class", "t").attr("font-size", fs)
+            .append("textPath").attr("href", "#" + id).attr("startOffset", "50%").attr("text-anchor", "middle").text(txt);
+        }
+      });
+    } else {
+      labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none");
+      var tickers = labs.append("text").attr("class", "t").attr("text-anchor", "middle")
+        .text(function (d) { return d.d.ticker; });
+      var pcts = labs.append("text").attr("class", "p").attr("text-anchor", "middle")
+        .text(function (d) { return fmtPct(d.d.perf); });
+      tickers.each(function (d) {
+        var rk = d.r, fs = clamp(6, 16, rk * 0.5);
+        d3.select(this).style("display", rk >= 11 ? null : "none").attr("font-size", fs).attr("y", rk >= 22 ? -fs * 0.1 : fs * 0.35);
+      });
+      pcts.each(function (d) {
+        var rk = d.r, fs = clamp(6, 12, rk * 0.32);
+        d3.select(this).style("display", rk >= 22 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
+      });
+    }
 
     /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
     if (n > 1) {
@@ -687,6 +721,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     /* ---- turning the dial ---- */
     applyRot = function (deg) {
       rg.attr("transform", "rotate(" + deg.toFixed(2) + ")");
+      if (labs) {
+        labs.attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ") rotate(" + (-deg).toFixed(2) + ")"; });
+      }
     };
     function setRot(deg) {
       rot = deg;
@@ -1151,7 +1188,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v15", path=str(d))
+        return components.declare_component("smz_bubbles_v16", path=str(d))
     except Exception:
         return None
 
@@ -1256,27 +1293,47 @@ def view_overview(day: pd.DataFrame, meta: dict) -> list:
     return items
 
 
+def _pick_sector(name: str) -> None:
+    S["bub_sector"] = name
+
+
 def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
-    """Radial bubble map: white circle split into sector wedges, company bubbles sized by market cap
-    and colored by performance (green/red, 5% steps)."""
+    """Radial map. All sectors: wedge map. One sector picked in the white sector box: every company
+    becomes a full ring (onion), biggest market cap outside, smallest in the centre."""
     if not meta["has_fund"]:
         st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
         return []
-    c = st.columns([1.1, 6.9])
-    label = c[0].selectbox("Performance", list(PERF_COLS), key="bub_perf")
-    step_v = float(S.get("bub_step", 5))
-    scale = 3 * step_v
-    top_n = int(S.get("bub_top", 500))
+    label_col, cap_col = st.columns([1.1, 6.9])
+    label = label_col.selectbox("Performance", list(PERF_COLS), key="bub_perf")
     perf_col = PERF_COLS[label]
-    payload = build_bubble_payload(day, perf_col, top_n, False)
+    scale = 15.0  # color step 5%
+    payload = build_bubble_payload(day, perf_col, 500, False)
+
+    secs: dict = {}
+    for n in payload["nodes"]:
+        secs[n["sector"]] = secs.get(n["sector"], 0.0) + n["mcap"]
+    sector_names = sorted(secs, key=lambda k: -secs[k])
+    chosen = S.get("bub_sector", "All")
+    if chosen != "All" and chosen not in secs:
+        chosen = "All"
+        S["bub_sector"] = "All"
+
+    nodes = payload["nodes"] if chosen == "All" else [n for n in payload["nodes"] if n["sector"] == chosen]
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
-    c[1].caption(f"{len(payload['nodes'])} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
-                 + " | biggest company on the outer layer, smallest in the centre | drag the dial to turn it, click a stock to open its chart")
+    if chosen == "All":
+        hint = "pick a sector in the box below to see its companies as rings"
+    else:
+        hint = f"{chosen}: biggest company on the outer ring, smallest in the centre"
+    cap_col.caption(f"{len(nodes)} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
+                    + f" | {hint} | drag the dial to turn it, click a stock to open its chart")
     comp = get_bubble_component()
     if comp is None:
         st.warning("The interactive map is not available in this environment.")
         return []
+
     valid = day.dropna(subset=[perf_col])
+    if chosen != "All":
+        valid = valid[valid["sector"] == chosen]
 
     def _rank(df: pd.DataFrame) -> list:
         return [dict(ticker=str(r["ticker"]), perf=float(r[perf_col]), price=float(r["close"]),
@@ -1285,11 +1342,23 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
 
     gainers = _rank(valid.nlargest(21, perf_col))
     losers = _rank(valid.nsmallest(21, perf_col))
-    ev = comp(nodes=payload["nodes"], scale=scale, perf_label=label, gainers=gainers, losers=losers,
-              key="smz_bubbles", default=None)
-    b = st.columns([1.3, 1.0, 5.7])
-    b[0].selectbox("Color step (%)", [1, 2, 3, 5, 10], index=3, key="bub_step")
-    b[1].number_input("Max Stocks", 20, 600, 500, step=10, key="bub_top")
+    ev = comp(nodes=nodes, scale=scale, perf_label=label, gainers=gainers, losers=losers,
+              mode="all" if chosen == "All" else "onion", key="smz_bubbles", default=None)
+
+    try:
+        box = st.container(key="secbox")
+    except TypeError:
+        box = st.container()
+    with box:
+        st.markdown('<div class="ttl">Sectors</div>', unsafe_allow_html=True)
+        names = ["All"] + sector_names
+        per_row = 6
+        for r0 in range(0, len(names), per_row):
+            cols = st.columns(per_row)
+            for j, nm in enumerate(names[r0:r0 + per_row]):
+                stretch(cols[j].button, "All sectors" if nm == "All" else nm, key=f"secbtn_{r0 + j}",
+                        type="primary" if nm == chosen else "secondary", on_click=_pick_sector, args=(nm,))
+
     if isinstance(ev, dict) and ev.get("ticker"):
         sym = clean_symbol(str(ev["ticker"]))
         if sym:
