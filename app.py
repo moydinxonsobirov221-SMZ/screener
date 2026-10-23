@@ -185,13 +185,13 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
-.slist{margin-top:8px;max-width:440px}
-.slist .r{display:grid;grid-template-columns:44px 1fr 1fr 1fr;border:1px solid #5c616b;border-radius:3px;
-  margin-bottom:2px;font-size:.78rem;line-height:1.1;color:#c4c8cf}
-.slist .r span{padding:3px 10px;border-left:1px solid #5c616b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slist{margin-top:8px;max-width:540px;border:1px solid #5c616b;border-radius:4px;overflow:hidden}
+.slist .r{display:grid;grid-template-columns:52px 1fr 1fr 1fr;border:0;border-bottom:1px solid #5c616b;margin:0;
+  font-size:.92rem;line-height:1.2;color:#c4c8cf}
+.slist .r:last-child{border-bottom:0}
+.slist .r span{padding:6px 14px;border-left:1px solid #5c616b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slist .r span:first-child{border-left:0;text-align:center;opacity:.7}
-.slist .r.h{font-size:.68rem;font-weight:600;color:#8b95a5;border-color:#33363d}
-.slist .r.h span{border-left-color:#33363d}
+.slist .r.h{font-size:.74rem;font-weight:600;color:#8b95a5}
 .st-key-secbox{border:1px solid #ffffff;border-radius:8px;padding:10px 12px 6px 12px;margin-top:6px}
 .st-key-secbox button{background:#000 !important;border:1px solid #333 !important;color:#e6e6e6 !important;
   min-height:30px;font-size:.78rem;padding:2px 6px}
@@ -1195,7 +1195,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v19", path=str(d))
+        return components.declare_component("smz_bubbles_v20", path=str(d))
     except Exception:
         return None
 
@@ -1378,7 +1378,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
 
 def sector_list_html(day: pd.DataFrame, sector: str) -> str:
     """Every stock of one sector as framed rows: number, ticker, price, daily change."""
-    x = day[day["sector"] == sector].sort_values("mcap", ascending=False, na_position="last")
+    x = day[day["sector"] == sector].sort_values("ticker")
     rows = ['<div class="slist"><div class="r h"><span>No.</span><span>Ticker</span><span>Price</span>'
             '<span>Change</span></div>']
     for i, (_, r) in enumerate(x.iterrows(), 1):
