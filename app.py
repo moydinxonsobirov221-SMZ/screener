@@ -5,11 +5,18 @@ Sections: 1 CONFIG | 2 DATA LAYER | 3 FILTER ENGINE | 4 UI HELPERS | 5 MARKET MA
 """
 from __future__ import annotations
 
+import email.utils
 import html
 import json
 import re
 import sqlite3
 import tempfile
+import time
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -185,6 +192,27 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .legend div{flex:1;text-align:center;font-size:10px;color:#fff;padding:2px 0}
 .ttl{font-size:.78rem;font-weight:700;color:#cfd6e0;margin:2px 0 0 0}
 .chartbar{font-size:.85rem;color:#cfd6e0;margin-bottom:2px}
+.tape{overflow:hidden;white-space:nowrap;border-top:1px solid #5c616b;border-bottom:1px solid #5c616b;background:#000;padding:7px 0;margin:2px 0 10px 0}
+.tape-in{display:inline-block;animation:tapemove linear infinite}
+.tape:hover .tape-in{animation-play-state:paused}
+@keyframes tapemove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tp-i{display:inline-flex;align-items:baseline;gap:8px;padding:0 18px;border-right:1px solid #2a2d33;font-size:.85rem;color:#c4c8cf}
+.tp-i b{color:#e6e6e6;font-weight:700}
+.tp-i em{font-style:normal;font-weight:600}
+.nlist{margin-top:6px}
+.nw{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid #5c616b}
+.nimg{flex:0 0 230px;height:128px;border-radius:8px;overflow:hidden;background:#0b0b0b;border:1px solid #2a2d33;
+  display:flex;align-items:center;justify-content:center}
+.nimg img{width:100%;height:100%;object-fit:cover}
+.nimg b{color:#8b95a5;font-size:1.3rem;letter-spacing:1px}
+.nbody{flex:1;min-width:0}
+.nmeta{font-size:.78rem;color:#8b95a5;margin-bottom:5px}
+.nttl{display:block;font-size:1.05rem;font-weight:700;color:#e6e6e6 !important;text-decoration:none !important;line-height:1.3;margin-bottom:5px}
+.nttl:hover{text-decoration:underline !important}
+.nsum{font-size:.85rem;color:#9a9fa8;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.nsyms{margin-top:7px;font-size:.78rem;color:#8b95a5}
+.nchip{display:inline-block;border:1px solid #5c616b;border-radius:5px;padding:1px 8px;margin:0 4px 2px 0;color:#c4c8cf;font-size:.78rem;font-weight:600}
+.nchip em{font-style:normal;margin-left:5px}
 .slist{margin-top:8px;max-width:540px;border:1px solid #5c616b;border-radius:4px;overflow:hidden}
 .slist .r{display:grid;grid-template-columns:52px 1fr 1fr 1fr;border:0;border-bottom:1px solid #5c616b;margin:0;
   font-size:.92rem;line-height:1.2;color:#c4c8cf}
@@ -867,6 +895,42 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 </script></body></html>"""
 
 
+MARKET_TILES = [("S&P 500", "FOREXCOM:SPXUSD"), ("NASDAQ 100", "FOREXCOM:NSXUSD"), ("DOW 30", "FOREXCOM:DJI"),
+                ("RUSSELL 2000 ETF", "AMEX:IWM"), ("BITCOIN", "BITSTAMP:BTCUSD"), ("GOLD XAUUSD", "OANDA:XAUUSD"),
+                ("OIL WTI", "TVC:USOIL"), ("DOLLAR INDEX", "TVC:DXY")]
+
+HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;padding:0;background:#000;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+.g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:2px}
+.c{height:__CH__px;border:1px solid #5c616b;border-radius:8px;overflow:hidden;background:#000}
+.c .tradingview-widget-container__widget{height:100%}
+</style></head><body><div class="g" id="g"></div><script>
+(function () {
+  var T = __TILES__;
+  T.forEach(function (t) {
+    var c = document.createElement("div"); c.className = "c tradingview-widget-container";
+    var w = document.createElement("div"); w.className = "tradingview-widget-container__widget"; c.appendChild(w);
+    document.getElementById("g").appendChild(c);
+    var s = document.createElement("script"); s.type = "text/javascript"; s.async = true;
+    s.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+    s.innerHTML = JSON.stringify({symbols: [[t[0], t[1] + "|1D"]], chartOnly: false, width: "100%", height: "100%",
+      locale: "en", colorTheme: "dark", autosize: true, showVolume: false, showMA: false, hideDateRanges: true,
+      hideMarketStatus: true, hideSymbolLogo: true, scalePosition: "right", scaleMode: "Normal", fontFamily: "Arial, sans-serif",
+      fontSize: "10", noTimeScale: false, valuesTracking: "1", changeMode: "price-and-percent", chartType: "candlesticks",
+      upColor: "#30cc5a", downColor: "#f63538", borderUpColor: "#30cc5a", borderDownColor: "#f63538",
+      wickUpColor: "#30cc5a", wickDownColor: "#f63538", backgroundColor: "#000000", dateRanges: ["1d|5"]});
+    c.appendChild(s);
+  });
+})();
+</script></body></html>"""
+
+EVENTS_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}</style></head><body>
+<div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div>
+<script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
+{"colorTheme": "dark", "isTransparent": true, "locale": "en", "importanceFilter": "-1,0,1",
+ "countryFilter": "us,eu,gb,jp,ca,au,nz,ch,cn", "width": "100%", "height": "820"}
+</script></div></body></html>"""
+
 PERF_COLS = {"Today": "chg", "Week": "pw", "Month": "pm", "Quarter": "pq"}
 
 
@@ -1292,6 +1356,209 @@ def view_stats(day: pd.DataFrame, meta: dict) -> list:
     return items
 
 
+def _h(x) -> str:
+    """HTML-escape and protect $ from the markdown math renderer."""
+    return html.escape(str(x)).replace("$", "&#36;")
+
+
+def tape_html(day: pd.DataFrame) -> str:
+    """Ticker tape: every company with price and change vs yesterday, scrolling right to left."""
+    d = day.dropna(subset=["close"]).sort_values("mcap", ascending=False, na_position="last")
+    parts = []
+    for t, c, g in zip(d["ticker"], d["close"], d["chg"]):
+        if pd.isna(g):
+            col, txt = "#9a9fa8", "-"
+        else:
+            col, txt = (GREEN if g > 0 else RED if g < 0 else "#c4c8cf"), f"{g:+.2f}%"
+        parts.append(f'<span class="tp-i"><b>{_h(t)}</b><span>{c:.2f}</span><em style="color:{col}">{txt}</em></span>')
+    inner = "".join(parts)
+    dur = max(60, int(len(parts) * 1.6))
+    return f'<div class="tape"><div class="tape-in" style="animation-duration:{dur}s">{inner}{inner}</div></div>'
+
+
+def home_charts_doc(ch: int = 300) -> str:
+    tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
+    return HOME_TEMPLATE.replace("__TILES__", tiles).replace("__CH__", str(int(ch)))
+
+
+def view_home(day: pd.DataFrame, meta: dict) -> list:
+    """Home: ticker tape of all companies, then index / bitcoin / gold / oil / dollar charts."""
+    st.markdown(tape_html(day), unsafe_allow_html=True)
+    render_iframe(home_charts_doc(300), 2 * 300 + 26)
+    return []
+
+
+# ---- news --------------------------------------------------------------------
+def _iso_ts(v) -> float:
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _norm_news(raw) -> list:
+    """Normalise yfinance news (old and new formats) to dicts: title, summary, provider, url, ts, thumb."""
+    out = []
+    for n in raw or []:
+        try:
+            c = n.get("content") if isinstance(n.get("content"), dict) else None
+            if c:
+                title, summ = c.get("title") or "", c.get("summary") or c.get("description") or ""
+                prov = (c.get("provider") or {}).get("displayName") or ""
+                url = (c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url") or ""
+                ts, th = _iso_ts(c.get("pubDate") or c.get("displayTime")), c.get("thumbnail") or {}
+            else:
+                title, summ, prov = n.get("title") or "", n.get("summary") or "", n.get("publisher") or ""
+                url, ts, th = n.get("link") or "", float(n.get("providerPublishTime") or 0), n.get("thumbnail") or {}
+            if not title:
+                continue
+            thumb = ""
+            res = sorted(th.get("resolutions") or [], key=lambda r: r.get("width") or 0)
+            if res:
+                big = [r for r in res if (r.get("width") or 0) >= 300]
+                thumb = (big[0] if big else res[-1]).get("url") or ""
+            thumb = thumb or th.get("originalUrl") or ""
+            summ = re.sub(r"<[^>]+>", " ", summ)
+            summ = re.sub(r"\s+", " ", summ).strip()
+            out.append(dict(title=title, summary=summ[:260], provider=prov, url=url, ts=ts, thumb=thumb))
+        except Exception:
+            continue
+    return out
+
+
+def _rss_news(t: str) -> list:
+    try:
+        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(t)}&region=US&lang=en-US"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            root = ET.fromstring(r.read())
+        out = []
+        for it in root.iter("item"):
+            try:
+                ts = email.utils.parsedate_to_datetime(it.findtext("pubDate") or "").timestamp()
+            except Exception:
+                ts = 0.0
+            summ = re.sub(r"<[^>]+>", " ", it.findtext("description") or "").strip()
+            out.append(dict(title=it.findtext("title") or "", summary=summ[:260], provider="Yahoo Finance",
+                            url=it.findtext("link") or "", ts=ts, thumb=""))
+        return [o for o in out if o["title"]]
+    except Exception:
+        return []
+
+
+def _fetch_news_one(t: str) -> list:
+    try:
+        import yfinance as yf
+    except Exception:
+        return _rss_news(t)
+    try:
+        return _norm_news(yf.Ticker(t).news)
+    except Exception:
+        return _rss_news(t)
+
+
+@st.cache_data(ttl=1200, show_spinner="Loading company news...")
+def load_company_news(tickers: tuple) -> dict:
+    res: dict = {}
+    ex = ThreadPoolExecutor(max_workers=8)
+    futs = {ex.submit(_fetch_news_one, t): t for t in tickers}
+    try:
+        for f in as_completed(futs, timeout=240):
+            try:
+                res[futs[f]] = f.result()
+            except Exception:
+                res[futs[f]] = []
+    except Exception:
+        pass
+    ex.shutdown(wait=False, cancel_futures=True)
+    return res
+
+
+def _ago(ts: float) -> str:
+    sec = max(0, time.time() - ts)
+    if sec < 3600:
+        m = max(1, int(sec // 60))
+        return f"{m} min ago"
+    if sec < 86400:
+        h = int(sec // 3600)
+        return f"{h} hour{'s' if h > 1 else ''} ago"
+    d = int(sec // 86400)
+    return f"{d} day{'s' if d > 1 else ''} ago"
+
+
+def _chg_span(g) -> str:
+    if g is None or pd.isna(g):
+        return ""
+    col = GREEN if g > 0 else RED if g < 0 else "#c4c8cf"
+    return f'<em style="color:{col}">{g:+.2f}%</em>'
+
+
+def news_card_html(a: dict, chg: dict) -> str:
+    syms = a["syms"]
+    main = a["main"]
+    img = (f'<img src="{html.escape(a["thumb"], quote=True)}" loading="lazy" referrerpolicy="no-referrer">'
+           if a["thumb"] else f"<b>{_h(main)}</b>")
+    meta = f'<span class="nchip">{_h(main)}{_chg_span(chg.get(main))}</span>' \
+           f'{_h(_ago(a["ts"]))} - {_h(a["provider"])}'
+    title = (f'<a class="nttl" href="{html.escape(a["url"], quote=True)}" target="_blank" rel="noopener">{_h(a["title"])}</a>'
+             if a["url"] else f'<span class="nttl">{_h(a["title"])}</span>')
+    summ = f'<div class="nsum">{_h(a["summary"])}</div>' if a["summary"] else ""
+    others = [t for t in syms if t != main][:6]
+    oth = ("<div class=\"nsyms\">Other symbols: " +
+           "".join(f'<span class="nchip">{_h(t)}{_chg_span(chg.get(t))}</span>' for t in others) + "</div>") if others else ""
+    return f'<div class="nw"><div class="nimg">{img}</div><div class="nbody"><div class="nmeta">{meta}</div>{title}{summ}{oth}</div></div>'
+
+
+def company_news(day: pd.DataFrame) -> None:
+    top = st.columns([1.2, 6.8])
+    period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=1, key="news_period")
+    hours = {"24 hours": 24, "48 hours": 48, "7 days": 168}[period]
+    tickers = tuple(sorted(day["ticker"].dropna().unique()))
+    data = load_company_news(tickers)
+    cut = time.time() - hours * 3600
+    chg = dict(zip(day["ticker"], day["chg"]))
+    arts: dict = {}
+    for t, items in data.items():
+        for it in items:
+            if it["ts"] < cut:
+                continue
+            a = arts.setdefault(it["url"] or it["title"], {**it, "syms": []})
+            if t not in a["syms"]:
+                a["syms"].append(t)
+    covered = {t for a in arts.values() for t in a["syms"]}
+    pct = len(covered) / max(len(tickers), 1) * 100
+    top[1].caption(f"{len(covered)} of {len(tickers)} stocks ({pct:.0f}%) have news in the last {period} "
+                   "| biggest movers first")
+    if not arts:
+        st.info("No company news found for this period. The news source may be busy, try again in a few minutes.")
+        return
+
+    def score(t) -> float:
+        v = chg.get(t)
+        return 0.0 if v is None or pd.isna(v) else abs(float(v))
+
+    for a in arts.values():
+        a["syms"].sort(key=lambda t: -score(t))
+        a["main"] = a["syms"][0]
+    ranked = sorted(arts.values(), key=lambda a: (-score(a["main"]), -a["ts"]))[:80]
+    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in ranked) + "</div>",
+                unsafe_allow_html=True)
+
+
+def macro_news() -> None:
+    st.caption("Economic calendar: central banks, inflation, jobs and other events that move the whole market")
+    render_iframe(EVENTS_DOC, 840)
+
+
+def view_news(day: pd.DataFrame, meta: dict) -> list:
+    tabs = st.tabs(["Company news", "Macro"])
+    with tabs[0]:
+        company_news(day)
+    with tabs[1]:
+        macro_news()
+    return []
+
+
 def view_overview(day: pd.DataFrame, meta: dict) -> list:
     """Overview = bubble map first; KPIs and top lists are tucked below in a collapsed block."""
     items = list(view_bubbles(day, meta))
@@ -1500,10 +1767,10 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
 # =============================================================================
 def header(dates: list) -> tuple[str, Optional[str]]:
     c = st.columns([1.6, 1.0, 3.4])
-    opts = ["Overview", "Screener"]
+    opts = ["Home", "Overview", "Screener", "News"]
     with c[0]:
         if hasattr(st, "segmented_control"):
-            view = st.segmented_control("View", opts, default="Overview", key="view", label_visibility="collapsed")
+            view = st.segmented_control("View", opts, default="Home", key="view", label_visibility="collapsed")
         else:
             view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed")
     c[1].selectbox("Date", dates, key="date", label_visibility="collapsed")
@@ -1517,7 +1784,7 @@ def header(dates: list) -> tuple[str, Optional[str]]:
             forced = clean_symbol(q)
             if forced is None:
                 st.warning("Enter a valid ticker (letters and digits only).")
-    return view or "Overview", forced
+    return view or "Home", forced
 
 
 def main() -> None:
@@ -1530,7 +1797,11 @@ def main() -> None:
 
     view, forced = header(dates)
     day = p[p["date"] == S["date"]]
-    if view == "Overview":
+    if view == "Home":
+        items = view_home(day, meta)
+    elif view == "News":
+        items = view_news(day, meta)
+    elif view == "Overview":
         items = view_overview(day, meta)
     else:
         items = view_screener(day, meta)
