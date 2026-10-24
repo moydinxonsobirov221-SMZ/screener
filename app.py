@@ -305,7 +305,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   padding:4px 12px;cursor:pointer;z-index:11;background:#1e8f45}
 #snd.off{background:#c0242f}
 #snd:hover{filter:brightness(1.15)}
-.side{position:fixed;display:none;z-index:5;font-size:12px}
+.side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.7);
+  border-radius:8px;padding:10px 10px 8px 10px;background:#000}
 .side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
 .side .hd.g{color:#34b560}.side .hd.r{color:#e0434f}
 .side .row{display:flex;align-items:center;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;
@@ -809,11 +810,11 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var cellByT = {};
     cells.each(function (d) { cellByT[d.d.ticker] = this; });
     (function () {
-      var side = W / 2 - R3, gap = 79, minW = 270;
+      var side = W / 2 - R3, gap = 79, minW = 300;
       if (side - gap < minW) { gap = Math.max(8, side - minW - 6); }
-      var wl = clamp(minW, 380, side - gap - 6);
+      var wl = clamp(minW, 400, side - gap - 6);
       var top = 44, bottomRes = 52, avail = H - top - bottomRes;
-      var rh = clamp(18, 32, (avail - 46) / 21 - 2), total = 46 + 21 * (rh + 2);
+      var rh = clamp(18, 32, (avail - 70) / 21 - 2), total = 70 + 21 * (rh + 2);
       var y0 = top + Math.max(0, (avail - total) / 2);
       var SEC = {"Information Technology": "Info Tech", "Consumer Discretionary": "Cons. Disc.",
                  "Consumer Staples": "Cons. Staples", "Communication Services": "Comm. Svcs",
@@ -1299,7 +1300,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v23", path=str(d))
+        return components.declare_component("smz_bubbles_v24", path=str(d))
     except Exception:
         return None
 
