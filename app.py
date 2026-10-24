@@ -307,20 +307,20 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #snd:hover{filter:brightness(1.15)}
 .side{position:fixed;display:none;z-index:5;font-size:12px}
 .side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
-.side .hd.g{color:#22a04d}.side .hd.r{color:#d02a33}
-.side .row{display:flex;align-items:stretch;box-sizing:border-box;margin-bottom:2px;padding:0;border-radius:3px;
-  font-weight:400;color:#e6e6e6;cursor:pointer;overflow:hidden;white-space:nowrap;line-height:1}
-.side .row.g,.side .row.r{border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.03)}
-.side .row:hover{background:rgba(255,255,255,.10)}
-.side .row span{display:flex;align-items:center;box-sizing:border-box;padding:0 8px;overflow:hidden;text-overflow:ellipsis}
-.side .row span+span{border-left:1px solid rgba(255,255,255,.5)}
-.side .rk{width:30px;justify-content:center;padding:0;opacity:.6;font-size:.85em}
-.side .tk{width:74px}
-.side .px{width:68px;justify-content:flex-end;font-variant-numeric:tabular-nums}
-.side .sc{flex:1;font-size:.92em}
-.side .pc{width:84px;justify-content:flex-end;font-variant-numeric:tabular-nums;font-weight:500}
-.side .row.g .pc{color:#22a04d}
-.side .row.r .pc{color:#d02a33}
+.side .hd.g{color:#34b560}.side .hd.r{color:#e0434f}
+.side .row{display:flex;align-items:center;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;
+  color:#e6e6e6;font-weight:500;cursor:pointer;overflow:hidden;white-space:nowrap}
+.side .row:hover{background:rgba(255,255,255,.08)}
+.side .row.cols{cursor:default;color:#8b95a5;font-size:.82em;font-weight:600;height:20px}
+.side .row.cols:hover{background:transparent}
+.side .row span{display:block;box-sizing:border-box;padding:0 8px;overflow:hidden;text-overflow:ellipsis;border:0}
+.side .rk{width:30px;text-align:center;padding:0;color:#8b95a5;font-weight:400}
+.side .tk{width:74px;font-weight:700}
+.side .px{width:68px;text-align:right;font-variant-numeric:tabular-nums}
+.side .sc{flex:1;color:#9a9fa8;font-weight:400}
+.side .pc{width:84px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.side .row.g .pc{color:#34b560}
+.side .row.r .pc{color:#e0434f}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
@@ -813,7 +813,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       if (side - gap < minW) { gap = Math.max(8, side - minW - 6); }
       var wl = clamp(minW, 380, side - gap - 6);
       var top = 44, bottomRes = 52, avail = H - top - bottomRes;
-      var rh = clamp(18, 32, (avail - 26) / 21 - 2), total = 26 + 21 * (rh + 2);
+      var rh = clamp(18, 32, (avail - 46) / 21 - 2), total = 46 + 21 * (rh + 2);
       var y0 = top + Math.max(0, (avail - total) / 2);
       var SEC = {"Information Technology": "Info Tech", "Consumer Discretionary": "Cons. Disc.",
                  "Consumer Staples": "Cons. Staples", "Communication Services": "Comm. Svcs",
@@ -823,7 +823,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         x = clamp(2, Math.max(2, W - wl - 2), x);
         el.style.left = x + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
         el.style.fontSize = clamp(11, 14, rh * 0.58) + "px";
-        var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>";
+        var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>" +
+          "<div class=\"row cols\"><span class=\"rk\">#</span><span class=\"tk\">Ticker</span><span class=\"px\">Last</span>" +
+          "<span class=\"sc\">Sector</span><span class=\"pc\">Change</span></div>";
         (rows || []).slice(0, 21).forEach(function (r, i) {
           h += "<div class=\"row " + (isGain ? "g" : "r") + "\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px\">" +
             "<span class=\"rk\">" + (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span>" +
@@ -832,7 +834,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
             "<span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
         });
         el.innerHTML = h;
-        Array.prototype.forEach.call(el.querySelectorAll(".row"), function (row) {
+        Array.prototype.forEach.call(el.querySelectorAll(".row[data-t]"), function (row) {
           var t = row.getAttribute("data-t");
           row.addEventListener("mouseenter", function () {
             var c = cellByT[t]; if (c) { d3.select(c).raise().attr("stroke", "#ffffff").attr("stroke-width", 2); }
@@ -1297,7 +1299,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v22", path=str(d))
+        return components.declare_component("smz_bubbles_v23", path=str(d))
     except Exception:
         return None
 
