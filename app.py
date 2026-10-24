@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -154,7 +155,7 @@ FMT = {"No.": "{:d}", "Price": "{:.2f}", "Change": "{:+.2f}%", "Gap": "{:+.2f}%"
        "Market Cap": _fmt_cap, "Float": _fmt_m, "Short Float": "{:.2f}%"}
 COLOR_COLS = {"Change", "Gap", "SMA20", "SMA50", "SMA200", "Perf Week", "Perf Month", "Perf Quarter"}
 
-GREEN, RED, GREY = "#2fbf83", "#e0475f", "#414554"
+GREEN, RED, GREY = "#1fb87f", "#ea4949", "#414554"
 PALETTE = ["#f63538", "#bf4045", "#8b444e", "#414554", "#35764e", "#2f9e4f", "#30cc5a"]
 
 CSS = """<style>
@@ -162,15 +163,15 @@ CSS = """<style>
 html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"],[data-testid="stMainBlockContainer"],
 [data-testid="stHeader"],[data-testid="stSidebar"],[data-testid="stSidebarContent"],[data-testid="stBottom"],
 [data-testid="stBottomBlockContainer"]{font-family:Inter,-apple-system,"SF Pro Display","Segoe UI",Arial,sans-serif;letter-spacing:-.005em}
-html,body{background:#040406 !important}
-.stApp{background:radial-gradient(900px 520px at 10% -6%,rgba(47,191,131,.10),transparent 62%),
-  radial-gradient(820px 500px at 94% 0%,rgba(224,71,95,.08),transparent 62%),
-  radial-gradient(1000px 620px at 50% 112%,rgba(86,110,255,.07),transparent 62%),#040406 !important;background-attachment:fixed !important}
+html,body{background:#0A0A0A !important}
+.stApp{background:#0A0A0A !important}
 [data-testid="stAppViewContainer"],[data-testid="stMain"],[data-testid="stMainBlockContainer"],[data-testid="stHeader"],
 [data-testid="stSidebar"],[data-testid="stSidebarContent"],[data-testid="stBottom"],[data-testid="stBottomBlockContainer"]{background:transparent !important}
 [data-testid="stHeader"]{height:2.4rem}
 [data-testid="stToolbar"],[data-testid="stDecoration"],#MainMenu,footer{display:none !important}
-.block-container{padding:3.4rem 1rem 1rem 1rem !important;max-width:100% !important;background:transparent}
+.block-container{padding:3.4rem 1rem 1rem 1rem !important;max-width:100% !important;box-sizing:border-box;
+  width:calc(100% - 12px);margin:6px auto 6px auto;background:rgba(15,15,18,.65) !important;
+  border:1px solid rgba(255,255,255,.07);border-radius:18px}
 div[data-testid="stVerticalBlock"]{gap:.4rem}
 div[data-testid="stHorizontalBlock"]{gap:.6rem}
 [data-testid="stWidgetLabel"] p,label p{font-size:.72rem !important;font-weight:600;color:#9a9a9a !important;margin:0}
@@ -238,21 +239,24 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
   border-color:#ffffff !important;font-weight:700}
 
 .tape,.slist,.st-key-secbox,.kpi,div[data-testid="stDialog"] div[role="dialog"]{
-  background:linear-gradient(rgba(12,12,15,.62),rgba(12,12,15,.62)) padding-box,
-    linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.03) 55%,rgba(255,255,255,.08)) border-box !important;
-  border:1px solid transparent !important;border-radius:14px;
-  -webkit-backdrop-filter:blur(24px) saturate(140%);backdrop-filter:blur(24px) saturate(140%);
-  box-shadow:0 10px 40px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05);
+  background:rgba(15,15,18,.65) !important;border:1px solid rgba(255,255,255,.07) !important;border-radius:14px;
+  -webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);
+  box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07);
   transition:box-shadow .3s ease,border-color .3s ease}
 .tape{padding:11px 0 !important}
 .kpi{border-radius:12px}
 .slist .r{border-bottom-color:rgba(255,255,255,.07) !important}
 .slist .r span{border-left-color:rgba(255,255,255,.07) !important}
 .tp-i{border-right-color:rgba(255,255,255,.07) !important}
-.tp-i em{text-shadow:0 0 14px color-mix(in srgb,currentColor 45%,transparent)}
+.gem-g,.gem-r,.gem-n{display:inline-block;font-style:normal}
+.gem-g{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  color:#34D399;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
+.gem-r{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  color:#F87171;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
+.gem-n{color:#c4c8cf}
 .st-key-secbox button{border-radius:10px !important;transition:all .25s ease}
-.st-key-secbox button:hover{box-shadow:0 0 18px rgba(255,255,255,.12)}
-.st-key-secbox [data-testid="stBaseButton-primary"]{box-shadow:0 0 22px rgba(255,255,255,.18)}
+.st-key-secbox button:hover{box-shadow:0 0 18px rgba(255,255,255,.10)}
+.st-key-secbox [data-testid="stBaseButton-primary"]{box-shadow:0 0 22px rgba(255,255,255,.16)}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -310,19 +314,18 @@ CHART_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 </script></body></html>"""
 
 
-BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
+BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:dark}
 html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:Inter,-apple-system,"SF Pro Display",Arial,Helvetica,sans-serif;color:#e6e6e6;letter-spacing:-.005em}
 svg{display:block;margin:0 auto;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .leaf{cursor:pointer}
-text.t{fill:#fff;font-weight:700;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2.5px;stroke-linejoin:round}
-text.p{fill:#fff;font-weight:600;pointer-events:none;paint-order:stroke;stroke:#000;stroke-width:2px;stroke-linejoin:round}
+text.t{fill:#f4f6f8;font-weight:700;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px;stroke-linejoin:round}
+text.p{fill:#eef1f4;font-weight:600;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:1.6px;stroke-linejoin:round}
 text.ring{fill:#fff;font-weight:700;pointer-events:none}
 text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
-#tip{position:fixed;pointer-events:none;display:none;background:rgba(12,12,15,.72);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
-  border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 12px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+#tip{position:fixed;pointer-events:none;display:none;background:rgba(15,15,18,.78);-webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);
+  border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 12px 40px rgba(0,0,0,.6)}
 #legend{position:fixed;left:10px;bottom:8px;font-size:10px;color:#9a9a9a}
 #legend .strip{display:flex;width:470px;margin-top:3px}
 #legend .strip span{flex:1;text-align:center;padding:3px 0}
@@ -331,12 +334,13 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   padding:4px 12px;cursor:pointer;z-index:11;background:#1e8f45}
 #snd.off{background:#c0242f}
 #snd:hover{filter:brightness(1.15)}
-.side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid transparent;border-radius:14px;
-  padding:12px 10px 8px 10px;background:linear-gradient(rgba(12,12,15,.62),rgba(12,12,15,.62)) padding-box,
-  linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.03) 55%,rgba(255,255,255,.08)) border-box;
-  -webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 10px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.05)}
+.side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.07);border-radius:14px;
+  padding:12px 10px 8px 10px;background:rgba(15,15,18,.65);
+  -webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
 .side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
-.side .hd.g{color:#2fbf83;text-shadow:0 0 16px rgba(47,191,131,.45)}.side .hd.r{color:#e0475f;text-shadow:0 0 16px rgba(224,71,95,.45)}
+.side .hd{display:inline-block}
+.side .hd.g{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
+.side .hd.r{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
 .side .row{display:flex;align-items:center;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;
   color:#e6e6e6;font-weight:500;cursor:pointer;overflow:hidden;white-space:nowrap}
 .side .row{transition:background .2s ease}
@@ -349,8 +353,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side .px{width:68px;text-align:right;font-variant-numeric:tabular-nums}
 .side .sc{flex:1;color:#9a9fa8;font-weight:400}
 .side .pc{width:84px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
-.side .row.g .pc{color:#2fbf83;text-shadow:0 0 12px rgba(47,191,131,.4)}
-.side .row.r .pc{color:#e0475f;text-shadow:0 0 12px rgba(224,71,95,.4)}
+.side .row.g .pc{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
+.side .row.r .pc{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
@@ -359,7 +363,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
-  var GREEN = ["#2fbf83", "#1f8f63", "#14634a"], RED = ["#e0475f", "#b8304a", "#842038"];
+  var GREEN = ["#2bbf8a", "#169a6c", "#0c6b4b"], RED = ["#e5484d", "#c0303d", "#8a1c2c"];
   var EXP = 0.32, CLICK_DEG = 3.6;
   var args = null, lastKey = null, resizeTimer = null;
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
@@ -670,6 +674,18 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     }
 
     var defs = svg.append("defs");
+    var gradIds = {};
+    function fillFor(v) {
+      var c = color(v);
+      if (!gradIds[c]) {
+        var id = "gr" + Object.keys(gradIds).length; gradIds[c] = id;
+        var gg = defs.append("radialGradient").attr("id", id).attr("cx", "50%").attr("cy", "42%").attr("r", "75%");
+        gg.append("stop").attr("offset", "0%").attr("stop-color", d3.color(c).brighter(0.5).formatHex());
+        gg.append("stop").attr("offset", "58%").attr("stop-color", c);
+        gg.append("stop").attr("offset", "100%").attr("stop-color", d3.color(c).darker(0.6).formatHex());
+      }
+      return "url(#" + gradIds[c] + ")";
+    }
     var rg = svg.append("g");          /* the whole dial: everything inside turns together */
     var NS = "vector-effect";
 
@@ -699,7 +715,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       .attr("d", function (d) {
         return onion ? bandPath(d) : "M" + d.poly.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join("L") + "Z";
       })
-      .attr("fill", function (d) { return color(d.d.perf); }).attr("stroke", "#000000").attr("stroke-width", 1.2)
+      .attr("fill", function (d) { return fillFor(d.d.perf); }).attr("stroke", "rgba(0,0,0,.6)").attr("stroke-width", 1.2)
       .attr("stroke-linejoin", "round").style(NS, "non-scaling-stroke");
     rg.append("circle").attr("r", R).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").attr("pointer-events", "none");
@@ -934,26 +950,24 @@ MARKET_TILES = [("S&P 500", "FOREXCOM:SPXUSD"), ("NASDAQ 100", "FOREXCOM:NSXUSD"
                 ("RUSSELL 2000", "AMEX:IWM"), ("BITCOIN", "BITSTAMP:BTCUSD"), ("GOLD", "OANDA:XAUUSD"),
                 ("OIL WTI", "TVC:USOIL"), ("DOLLAR", "CAPITALCOM:DXY")]
 
-HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark">
+HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet"><style>
-:root{color-scheme:dark}
 html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:Inter,-apple-system,"SF Pro Display",Arial,sans-serif;letter-spacing:-.005em}
 .g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1cm;padding:0 calc(2.21cm - 16px)}
 .c{position:relative;height:__CH__px;box-sizing:border-box;border:1px solid transparent;border-radius:14px;overflow:hidden;
   background:linear-gradient(#0a0a0c,#0a0a0c) padding-box,linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.03) 55%,rgba(255,255,255,.08)) border-box;
   box-shadow:0 12px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05)}
 .h{height:22px;line-height:22px;padding:0 10px;font-size:11px;font-weight:700;letter-spacing:.2px;color:#e6e6e6;white-space:nowrap;overflow:hidden}
-.h .chg{margin-left:2cm;font-variant-numeric:tabular-nums}
+.h .chg{margin-left:2cm;font-variant-numeric:tabular-nums;display:inline-block;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.h .chg.g{background-image:linear-gradient(90deg,#34D399,#059669);filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
+.h .chg.r{background-image:linear-gradient(90deg,#F87171,#DC2626);filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
+.h .chg.n{background-image:none;-webkit-text-fill-color:#9aa0a8}
 </style></head><body><div class="g" id="g"></div><script>
 (function () {
   var CHG = __CHG__, T = __TILES__, CH0 = __CH__, CH = CH0, HEAD = 22, timer = null, g = document.getElementById("g");
   function fit() {
-    try {
-      var ph = window.parent.innerHeight, fe = window.frameElement, top = 126;
-      if (fe) { var r = fe.getBoundingClientRect(); if (r.top > 60 && r.top < ph) { top = r.top; } }
-      CH = Math.max(150, Math.min(420, Math.floor((ph - top - 64 - 38 - 6) / 2)));
-      if (fe) { fe.style.height = (2 * CH + 44) + "px"; fe.setAttribute("height", 2 * CH + 44); }
-    } catch (e) { CH = CH0; }
+    var ih = window.innerHeight || 0;
+    CH = ih > 300 ? Math.max(150, Math.min(420, Math.floor((ih - 44) / 2))) : CH0;
   }
   function build() {
     fit();
@@ -964,9 +978,8 @@ html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:
       var nm = document.createElement("span"); nm.textContent = t[0]; h.appendChild(nm);
       var v = CHG[t[1]], ch = document.createElement("span"); ch.className = "chg";
       if (typeof v === "number") {
-        ch.textContent = (v > 0 ? "+" : "") + v.toFixed(2) + "%"; ch.style.color = v > 0 ? "#2fbf83" : (v < 0 ? "#e0475f" : "#c4c8cf");
-        ch.style.textShadow = v > 0 ? "0 0 12px rgba(47,191,131,.5)" : (v < 0 ? "0 0 12px rgba(224,71,95,.5)" : "none");
-      } else { ch.textContent = "-"; ch.style.color = "#8b95a5"; }
+        ch.textContent = (v > 0 ? "+" : "") + v.toFixed(2) + "%"; ch.className = "chg " + (v > 0 ? "g" : (v < 0 ? "r" : "n"));
+      } else { ch.textContent = "-"; ch.className = "chg n"; }
       h.appendChild(ch); c.appendChild(h);
       setTimeout(function () {
         var box = document.createElement("div"); box.className = "tradingview-widget-container";
@@ -979,14 +992,14 @@ html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:
           locale: "en", colorTheme: "dark", autosize: true, showVolume: false, showMA: false, hideDateRanges: true,
           hideMarketStatus: true, hideSymbolLogo: true, scalePosition: "right", scaleMode: "Normal",
           fontFamily: "Arial, sans-serif", fontSize: "10", noTimeScale: false, valuesTracking: "1",
-          changeMode: "price-and-percent", chartType: "candlesticks", upColor: "#2fbf83", downColor: "#e0475f",
-          borderUpColor: "#2fbf83", borderDownColor: "#e0475f", wickUpColor: "#2fbf83", wickDownColor: "#e0475f",
+          changeMode: "price-and-percent", chartType: "candlesticks", upColor: "#2bbf8a", downColor: "#e5484d",
+          borderUpColor: "#2bbf8a", borderDownColor: "#e5484d", wickUpColor: "#2bbf8a", wickDownColor: "#e5484d",
           backgroundColor: "#0a0a0c", gridLineColor: "rgba(0,0,0,0)", dateRanges: ["1m|1D"]});
         box.appendChild(s);
         var ov = document.createElement("div");
         ov.style.cssText = "position:absolute;left:0;right:0;top:" + HEAD + "px;bottom:64px;z-index:3";
         c.appendChild(ov);
-      }, i * 350);
+      }, 0);
     });
   }
   build();
@@ -994,7 +1007,7 @@ html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:
 })();
 </script></body></html>"""
 
-EVENTS_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><style>:root{color-scheme:dark}html,body{margin:0;background:transparent}</style></head><body>
+EVENTS_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent}</style></head><body>
 <div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div>
 <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
 {"colorTheme": "dark", "isTransparent": true, "locale": "en", "importanceFilter": "-1,0,1",
@@ -1301,8 +1314,11 @@ def kpi_html(day: pd.DataFrame) -> str:
              ("Above SMA20", pct("d20"), ""), ("Above SMA50", pct("d50"), ""), ("Above SMA200", pct("d200"), ""),
              ("New High", f"{int(day['newhigh'].sum())}", ""), ("New Low", f"{int(day['newlow'].sum())}", ""),
              ("$ Volume", f"${day['dvol'].sum():,.0f}M", "")]
-    out = "".join(f'<div class="kpi"><span>{a}</span><b style="color:{c or "#e6edf3"}">{b}</b></div>'
-                  for a, b, c in tiles)
+    def _kb(c):
+        cls = "gem-g" if c == GREEN else "gem-r" if c == RED else ""
+        return f'class="{cls}"' if cls else 'style="color:#e6edf3"'
+
+    out = "".join(f'<div class="kpi"><span>{a}</span><b {_kb(c)}>{b}</b></div>' for a, b, c in tiles)
     total = max(n, 1)
     bar = (f'<div class="bar"><div style="width:{adv / total * 100:.1f}%;background:{GREEN}"></div>'
            f'<div style="width:{unch / total * 100:.1f}%;background:{GREY}"></div>'
@@ -1337,7 +1353,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v25", path=str(d))
+        return components.declare_component("smz_bubbles_v26", path=str(d))
     except Exception:
         return None
 
@@ -1445,10 +1461,10 @@ def tape_html(day: pd.DataFrame) -> str:
     parts = []
     for t, c, g in zip(d["ticker"], d["close"], d["chg"]):
         if pd.isna(g):
-            col, txt = "#9a9fa8", "-"
+            cls, txt = "gem-n", "-"
         else:
-            col, txt = (GREEN if g > 0 else RED if g < 0 else "#c4c8cf"), f"{g:+.2f}%"
-        parts.append(f'<span class="tp-i"><b>{_h(t)}</b><span>{c:.2f}</span><em style="color:{col}">{txt}</em></span>')
+            cls, txt = ("gem-g" if g > 0 else "gem-r" if g < 0 else "gem-n"), f"{g:+.2f}%"
+        parts.append(f'<span class="tp-i"><b>{_h(t)}</b><span>{c:.2f}</span><em class="{cls}">{txt}</em></span>')
     inner = "".join(parts)
     dur = max(120, int(len(parts) * 3.4))
     return f'<div class="tape"><div class="tape-in" style="animation-duration:{dur}s">{inner}{inner}</div></div>'
@@ -1463,30 +1479,37 @@ MARKET_ALTS = {
 }
 
 
-@st.cache_data(ttl=120, show_spinner=False)
-def market_changes(symbols: tuple) -> dict:
-    """Today's change in % vs yesterday's close per chart symbol (TradingView scanner, best effort).
-    If the exact symbol is not served, a close substitute (index or ETF) is used."""
+def _scan_market(market: str, tickers: list) -> dict:
+    out: dict = {}
+    try:
+        body = json.dumps({"symbols": {"tickers": tickers, "query": {"types": []}},
+                           "columns": ["close", "change"]}).encode()
+        req = urllib.request.Request(f"https://scanner.tradingview.com/{market}/scan", data=body,
+                                     headers={"User-Agent": _SA_UA, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=4) as r:
+            data = json.loads(r.read().decode("utf-8", "ignore"))
+        for row in data.get("data", []):
+            d = row.get("d") or []
+            if len(d) >= 2 and d[1] is not None:
+                out[row["s"]] = float(d[1])
+    except Exception:
+        pass
+    return out
+
+
+def _fetch_changes(symbols: tuple) -> dict:
+    """All scanner markets are asked in parallel (about 4 s at most)."""
     cands = {sym: MARKET_ALTS.get(sym, [sym]) for sym in symbols}
     wanted = list(dict.fromkeys(x for v in cands.values() for x in v))
     found: dict = {}
-    for market in ("america", "cfd", "forex", "crypto", "global"):
-        todo = [x for x in wanted if x not in found]
-        if not todo or all(any(c in found for c in v) for v in cands.values()):
-            break
-        try:
-            body = json.dumps({"symbols": {"tickers": todo, "query": {"types": []}},
-                               "columns": ["close", "change"]}).encode()
-            req = urllib.request.Request(f"https://scanner.tradingview.com/{market}/scan", data=body,
-                                         headers={"User-Agent": _SA_UA, "Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                data = json.loads(r.read().decode("utf-8", "ignore"))
-            for row in data.get("data", []):
-                d = row.get("d") or []
-                if len(d) >= 2 and d[1] is not None:
-                    found[row["s"]] = float(d[1])
-        except Exception:
-            continue
+    ex = ThreadPoolExecutor(max_workers=5)
+    futs = [ex.submit(_scan_market, m, wanted) for m in ("america", "cfd", "forex", "crypto", "global")]
+    try:
+        for f in as_completed(futs, timeout=6):
+            found.update(f.result())
+    except Exception:
+        pass
+    ex.shutdown(wait=False, cancel_futures=True)
     out: dict = {}
     for sym, alts in cands.items():
         for c in alts:
@@ -1496,7 +1519,34 @@ def market_changes(symbols: tuple) -> dict:
     return out
 
 
-def home_charts_doc(ch: int = 220) -> str:
+@st.cache_resource(show_spinner=False)
+def _market_store() -> dict:
+    return {"data": {}, "ts": 0.0, "busy": False}
+
+
+def market_changes(symbols: tuple) -> dict:
+    """Today's change in % per chart symbol. Served from memory instantly; refreshed in the background."""
+    store = _market_store()
+
+    def refresh() -> None:
+        store["busy"] = True
+        try:
+            new = _fetch_changes(symbols)
+            if new:
+                store["data"] = {**store["data"], **new}
+            store["ts"] = time.time()
+        finally:
+            store["busy"] = False
+
+    age = time.time() - store["ts"]
+    if not store["data"] and age > 60 and not store["busy"]:
+        refresh()  # first visit (or after a failed attempt more than a minute ago)
+    elif store["data"] and age > 60 and not store["busy"]:
+        threading.Thread(target=refresh, daemon=True).start()
+    return dict(store["data"])
+
+
+def home_charts_doc(ch: int = 215) -> str:
     tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
     chg = json.dumps(market_changes(tuple(sym for _, sym in MARKET_TILES)))
     return (HOME_TEMPLATE.replace("__CHG__", chg).replace("__TILES__", tiles).replace("__CH__", str(int(ch))))
@@ -1505,7 +1555,7 @@ def home_charts_doc(ch: int = 220) -> str:
 def view_home(day: pd.DataFrame, meta: dict) -> list:
     """Home: ticker tape of all companies, then index / bitcoin / gold / oil / dollar charts."""
     st.markdown(tape_html(day), unsafe_allow_html=True)
-    render_iframe(home_charts_doc(220), 2 * 220 + 44)
+    render_iframe(home_charts_doc(215), 2 * 215 + 44)
     return []
 
 
@@ -1643,8 +1693,8 @@ def _ago(ts: float) -> str:
 def _chg_span(g) -> str:
     if g is None or pd.isna(g):
         return ""
-    col = GREEN if g > 0 else RED if g < 0 else "#c4c8cf"
-    return f'<em style="color:{col}">{g:+.2f}%</em>'
+    cls = "gem-g" if g > 0 else "gem-r" if g < 0 else "gem-n"
+    return f'<em class="{cls}">{g:+.2f}%</em>'
 
 
 def news_card_html(a: dict, chg: dict) -> str:
@@ -1808,13 +1858,13 @@ def sector_list_html(day: pd.DataFrame, sector: str) -> str:
     for i, (_, r) in enumerate(x.iterrows(), 1):
         chg = r["chg"]
         if pd.isna(chg):
-            ctxt, ccol = "-", "#e6e6e6"
+            ctxt, ccol = "-", "gem-n"
         else:
-            ctxt, ccol = f"{chg:+.2f}%", (GREEN if chg > 0 else RED if chg < 0 else "#e6e6e6")
+            ctxt, ccol = f"{chg:+.2f}%", ("gem-g" if chg > 0 else "gem-r" if chg < 0 else "gem-n")
         price = "-" if pd.isna(r["close"]) else f"{r['close']:.2f}"
         rows.append(f'<div class="r"><span>{i}</span><span>{html.escape(str(r["ticker"]))}</span>'
                     f'<span>{price}</span>'
-                    f'<span style="color:{ccol}">{ctxt}</span></div>')
+                    f'<span><i class="{ccol}" style="font-style:normal">{ctxt}</i></span></div>')
     rows.append("</div>")
     return "".join(rows)
 
