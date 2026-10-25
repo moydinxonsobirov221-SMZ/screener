@@ -333,6 +333,8 @@ button[data-testid="stBaseButton-secondary"]:hover{border-color:rgba(16,185,129,
   animation:smzfade .38s cubic-bezier(0.16,1,0.3,1)}
 @keyframes smzfade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .st-key-filtergrid div[data-testid="stHorizontalBlock"]{gap:.8rem}
+.fsec{font-size:.82rem;font-weight:600;color:#cfd6e0;margin:8px 0 4px 0;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.06)}
+.fsec:first-of-type{margin-top:2px}
 .resline{font-size:.82rem;color:#9aa0a8;line-height:1.2}
 .resline b{color:#e6e8ec;font-weight:600}
 .st-key-ctrlbar{margin:4px 0 8px 0}
@@ -1861,8 +1863,7 @@ def _n_active() -> int:
 
 
 def filter_ui(day: pd.DataFrame, meta: dict) -> None:
-    """Compact Finviz-style grid for day / swing traders: three tabs, one row of six slots each,
-    so switching tabs never changes the height of the block."""
+    """Every filter visible at once: Descriptive row on top, Technical & Trend rows right below."""
     with keyed("filtergrid"):
         try:
             head = st.columns([6, 1.1], vertical_alignment="center")
@@ -1871,28 +1872,28 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
         head[0].markdown(f'<div class="resline"><b>Filters</b> &nbsp;|&nbsp; {_n_active()} active</div>',
                          unsafe_allow_html=True)
         head[1].button("Reset", on_click=reset_all, key="reset_btn")
-        tabs = st.tabs(["Descriptive", "Technical", "Trend"])
-        with tabs[0]:
-            a = st.columns(6)
-            a[0].text_input("Ticker", key="q", placeholder="e.g. AAPL")
-            _sel(a[1], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
-            _sel(a[2], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
-            _sel(a[3], "Average Volume", VOLUME, "avgvol")
-            _sel(a[4], "Relative Volume", RELVOL, "relvol")
-            _sel(a[5], "Price", PRICE, "price")
-        with tabs[1]:
-            b = st.columns(6)
-            b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
-            _sel(b[1], "Change", CHANGE, "chg")
-            _sel(b[2], "Gap %", GAP, "gap")
-            _sel(b[3], "ATR", ATR_OPT, "atr")
-            _sel(b[4], "RSI (14)", RSI_OPT, "rsi")
-        with tabs[2]:
-            t = st.columns(6)
-            _sel(t[0], "SMA20", SMA_OPTS[20], "s20")
-            _sel(t[1], "SMA50", SMA_OPTS[50], "s50")
-            _sel(t[2], "SMA200", SMA_OPTS[200], "s200")
-            _sel(t[3], "52-Week High/Low", HL52, "hl52")
+
+        st.markdown('<div class="fsec">Descriptive Filters</div>', unsafe_allow_html=True)
+        a = st.columns(6)
+        a[0].text_input("Ticker", key="q", placeholder="e.g. AAPL")
+        _sel(a[1], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
+        _sel(a[2], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
+        _sel(a[3], "Average Volume", VOLUME, "avgvol")
+        _sel(a[4], "Relative Volume", RELVOL, "relvol")
+        _sel(a[5], "Price", PRICE, "price")
+
+        st.markdown('<div class="fsec">Technical &amp; Trend Filters</div>', unsafe_allow_html=True)
+        b = st.columns(6)
+        b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
+        _sel(b[1], "Change", CHANGE, "chg")
+        _sel(b[2], "Gap %", GAP, "gap")
+        _sel(b[3], "ATR", ATR_OPT, "atr")
+        _sel(b[4], "RSI (14)", RSI_OPT, "rsi")
+        _sel(b[5], "52-Week High/Low", HL52, "hl52")
+        t = st.columns(6)
+        _sel(t[0], "SMA20", SMA_OPTS[20], "s20")
+        _sel(t[1], "SMA50", SMA_OPTS[50], "s50")
+        _sel(t[2], "SMA200", SMA_OPTS[200], "s200")
 
 
 # ---- institutional data table (custom component: row hover, zebra rows, glowing numbers) ----
