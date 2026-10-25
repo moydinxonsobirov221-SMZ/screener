@@ -1028,7 +1028,7 @@ def db_stamp() -> float:
         return 0.0
 
 
-@st.cache_data(ttl=900, show_spinner="Calculating indicators...")
+@st.cache_data(ttl=21600, show_spinner="Calculating indicators...")
 def load_data(stamp: float = 0.0) -> tuple[pd.DataFrame, dict]:
     """Read prices/tickers/fund tables and compute all indicators for every ticker and day."""
     con = sqlite3.connect(DB_PATH)
@@ -1548,7 +1548,7 @@ def market_changes(symbols: tuple) -> dict:
 
 def home_charts_doc(ch: int = 215) -> str:
     tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
-    chg = json.dumps(market_changes(tuple(sym for _, sym in MARKET_TILES)))
+    chg = json.dumps({k: round(v, 2) for k, v in market_changes(tuple(sym for _, sym in MARKET_TILES)).items()})
     return (HOME_TEMPLATE.replace("__CHG__", chg).replace("__TILES__", tiles).replace("__CH__", str(int(ch))))
 
 
@@ -1642,8 +1642,7 @@ def _fetch_sa_stock(t: str):
     return []
 
 
-@st.cache_data(ttl=1200, show_spinner="Loading company news from stockanalysis.com...")
-def load_company_news(tickers: tuple) -> dict:
+def _load_news_raw(tickers: tuple) -> dict:
     arts: dict = {}
     stats = {"ok": 0, "fail": 0, "err": "", "parsed": 0}
 
@@ -1676,6 +1675,34 @@ def load_company_news(tickers: tuple) -> dict:
         pass
     ex.shutdown(wait=False, cancel_futures=True)
     return {"arts": list(arts.values()), **stats}
+
+
+@st.cache_resource(show_spinner=False)
+def _news_store() -> dict:
+    return {"data": None, "ts": 0.0, "busy": False, "lock": threading.Lock()}
+
+
+def news_data(tickers: tuple):
+    """Return (news, loading). The download runs in a background thread, so the page never freezes."""
+    store = _news_store()
+    with store["lock"]:
+        stale = time.time() - store["ts"] > 1200
+        start = (store["data"] is None or stale) and not store["busy"]
+        if start:
+            store["busy"] = True
+
+    def work() -> None:
+        try:
+            store["data"] = _load_news_raw(tickers)
+            store["ts"] = time.time()
+        except Exception:  # noqa: BLE001
+            store["ts"] = time.time()
+        finally:
+            store["busy"] = False
+
+    if start:
+        threading.Thread(target=work, daemon=True).start()
+    return store["data"], store["busy"]
 
 
 def _ago(ts: float) -> str:
@@ -1713,12 +1740,19 @@ def news_card_html(a: dict, chg: dict) -> str:
     return f'<div class="nw"><div class="nimg">{img}</div><div class="nbody"><div class="nmeta">{meta}</div>{title}{summ}{oth}</div></div>'
 
 
-def company_news(day: pd.DataFrame) -> None:
+def _company_news(day: pd.DataFrame) -> None:
     top = st.columns([1.2, 6.8])
     period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=0, key="news_period")
     hours = {"24 hours": 24, "48 hours": 48, "7 days": 168}[period]
     tickers = tuple(sorted(day["ticker"].dropna().unique()))
-    data = load_company_news(tickers)
+    data, loading = news_data(tickers)
+    if data is None:
+        st.info("Loading company news in the background. This takes about a minute the first time; "
+                "the page updates by itself and stays usable meanwhile.")
+        if loading and hasattr(st, "fragment"):
+            time.sleep(3)
+            st.rerun(scope="fragment")
+        return
     cut = time.time() - hours * 3600
     chg = dict(zip(day["ticker"], day["chg"]))
     arts = []
@@ -1752,24 +1786,31 @@ def company_news(day: pd.DataFrame) -> None:
                 unsafe_allow_html=True)
 
 
+company_news = st.fragment(_company_news) if hasattr(st, "fragment") else _company_news
+
+
 def macro_news() -> None:
     st.caption("Economic calendar: central banks, inflation, jobs and other events that move the whole market")
     render_iframe(EVENTS_DOC, 840)
 
 
 def view_news(day: pd.DataFrame, meta: dict) -> list:
-    tabs = st.tabs(["Company news", "Macro"])
-    with tabs[0]:
-        company_news(day)
-    with tabs[1]:
+    opts = ["Company news", "Macro"]
+    if hasattr(st, "segmented_control"):
+        sub = st.segmented_control("News section", opts, default=opts[0], key="news_sub", label_visibility="collapsed")
+    else:
+        sub = st.radio("News section", opts, horizontal=True, key="news_sub", label_visibility="collapsed")
+    if sub == "Macro":
         macro_news()
+    else:
+        company_news(day)
     return []
 
 
 def view_overview(day: pd.DataFrame, meta: dict) -> list:
     """Overview = bubble map first; KPIs and top lists are tucked below in a collapsed block."""
     items = list(view_bubbles(day, meta))
-    with st.expander("Market overview (KPIs & top lists)", expanded=False):
+    if st.toggle("Show market statistics (KPIs & top lists)", key="show_stats", value=False):
         items += view_stats(day, meta)
     return items
 
