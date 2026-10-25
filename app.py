@@ -155,23 +155,24 @@ FMT = {"No.": "{:d}", "Price": "{:.2f}", "Change": "{:+.2f}%", "Gap": "{:+.2f}%"
        "Market Cap": _fmt_cap, "Float": _fmt_m, "Short Float": "{:.2f}%"}
 COLOR_COLS = {"Change", "Gap", "SMA20", "SMA50", "SMA200", "Perf Week", "Perf Month", "Perf Quarter"}
 
-GREEN, RED, GREY = "#1fb87f", "#ea4949", "#414554"
-PALETTE = ["#f63538", "#bf4045", "#8b444e", "#414554", "#35764e", "#2f9e4f", "#30cc5a"]
+# jewel tones: Emerald (positive) / Ruby (negative)
+GREEN, RED, GREY = "#10B981", "#EF4444", "#414554"
+PALETTE = ["#EF4444", "#C62F3E", "#8B1A2B", "#414554", "#065F46", "#0B8F66", "#10B981"]
 
 CSS = """<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"],[data-testid="stMainBlockContainer"],
 [data-testid="stHeader"],[data-testid="stSidebar"],[data-testid="stSidebarContent"],[data-testid="stBottom"],
 [data-testid="stBottomBlockContainer"]{font-family:Inter,-apple-system,"SF Pro Display","Segoe UI",Arial,sans-serif;letter-spacing:-.005em}
-html,body{background:#0A0A0A !important}
-.stApp{background:#0A0A0A !important}
+html,body{background:#08080A !important}
+.stApp{background:#08080A !important}
 [data-testid="stAppViewContainer"],[data-testid="stMain"],[data-testid="stMainBlockContainer"],[data-testid="stHeader"],
 [data-testid="stSidebar"],[data-testid="stSidebarContent"],[data-testid="stBottom"],[data-testid="stBottomBlockContainer"]{background:transparent !important}
 [data-testid="stHeader"]{height:2.4rem}
 [data-testid="stToolbar"],[data-testid="stDecoration"],#MainMenu,footer{display:none !important}
-.block-container{padding:3.4rem 1rem 1rem 1rem !important;max-width:100% !important;box-sizing:border-box;
-  width:calc(100% - 12px);margin:6px auto 6px auto;background:rgba(15,15,18,.65) !important;
-  border:1px solid rgba(255,255,255,.07);border-radius:18px}
+.block-container{padding:2.4rem 1rem 1rem 1rem !important;max-width:100% !important;box-sizing:border-box;
+  width:calc(100% - 12px);margin:6px auto 6px auto;background:rgba(13,13,16,.75) !important;
+  border:1px solid rgba(255,255,255,.08);border-radius:18px}
 div[data-testid="stVerticalBlock"]{gap:.4rem}
 div[data-testid="stHorizontalBlock"]{gap:.6rem}
 [data-testid="stWidgetLabel"] p,label p{font-size:.72rem !important;font-weight:600;color:#9a9a9a !important;margin:0}
@@ -184,7 +185,7 @@ div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{backgro
 [data-testid="stForm"]{border:0 !important;padding:0 !important;background:transparent}
 div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:98vw !important;
   background:#000 !important;border:1px solid #151515}
-.smz-brand{position:fixed;top:0;left:0;z-index:1000000;background:transparent;padding:6px 18px 4px 16px;line-height:1.1}
+.smz-brand{line-height:1.1}
 .smz-brand .logo{font-size:27px;font-weight:800;letter-spacing:2px;color:#fff;font-family:Arial,Helvetica,sans-serif}
 .smz-brand .logo span{color:#26a69a}
 .fdr{position:relative;display:inline-block;font-size:11px;color:#8b95a5;cursor:pointer;outline:none;
@@ -238,25 +239,53 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .st-key-secbox [data-testid="stBaseButton-primary"]{background:#ffffff !important;color:#000 !important;
   border-color:#ffffff !important;font-weight:700}
 
-.tape,.slist,.st-key-secbox,.kpi,div[data-testid="stDialog"] div[role="dialog"]{
-  background:rgba(15,15,18,.65) !important;border:1px solid rgba(255,255,255,.07) !important;border-radius:14px;
-  -webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);
+/* ---- floating liquid-glass sheets over the matte black canvas ---- */
+.tape,.slist,.st-key-secbox,.st-key-wheelpanel,.kpi,div[data-testid="stDialog"] div[role="dialog"]{
+  background:rgba(13,13,16,.75) !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:14px;
+  -webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);
   box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07);
   transition:box-shadow .3s ease,border-color .3s ease}
 .tape{padding:11px 0 !important}
 .kpi{border-radius:12px}
-.slist .r{border-bottom-color:rgba(255,255,255,.07) !important}
-.slist .r span{border-left-color:rgba(255,255,255,.07) !important}
-.tp-i{border-right-color:rgba(255,255,255,.07) !important}
+.slist .r{border-bottom-color:rgba(255,255,255,.08) !important}
+.slist .r span{border-left-color:rgba(255,255,255,.08) !important}
+.tp-i{border-right-color:rgba(255,255,255,.08) !important}
+
+/* ---- jewel tones: Emerald (positive) / Ruby (negative) ---- */
 .gem-g,.gem-r,.gem-n{display:inline-block;font-style:normal}
-.gem-g{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  color:#34D399;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
-.gem-r{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  color:#F87171;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
+.gem-g{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
+.gem-r{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
 .gem-n{color:#c4c8cf}
 .st-key-secbox button{border-radius:10px !important;transition:all .25s ease}
 .st-key-secbox button:hover{box-shadow:0 0 18px rgba(255,255,255,.10)}
 .st-key-secbox [data-testid="stBaseButton-primary"]{box-shadow:0 0 22px rgba(255,255,255,.16)}
+
+/* ---- single-row navigation bar ---- */
+.smz-brand{position:relative;z-index:60}
+.smz-brand .logo{font-size:24px}
+.smz-brand .logo span{color:#10B981}
+.st-key-topbar{padding:2px 6px 10px 6px;margin:0 0 8px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.st-key-topbar div[data-testid="stHorizontalBlock"]{align-items:center;gap:1rem}
+.st-key-topbar [data-testid="stMarkdownContainer"] p{margin:0}
+.st-key-nav [data-testid="stButtonGroup"]{background:transparent !important;border:0 !important;padding:0 !important;gap:4px}
+.st-key-nav button{background:transparent !important;border:0 !important;border-radius:0 !important;
+  box-shadow:none !important;min-height:34px;padding:6px 14px;color:#7d8594 !important;
+  font-size:.92rem;font-weight:500;letter-spacing:.2px;transition:color .2s ease}
+.st-key-nav button p{color:inherit !important;font-size:.92rem;font-weight:inherit;margin:0}
+.st-key-nav button:hover{color:#e6e6e6 !important}
+.st-key-nav button[kind="segmented_controlActive"],.st-key-nav button[data-testid="stBaseButton-segmented_controlActive"]{
+  color:#ffffff !important;font-weight:600;box-shadow:inset 0 -1px 0 #10B981 !important}
+.st-key-topbar div[data-baseweb="select"] > div,.st-key-topbar .stTextInput input{
+  background:rgba(255,255,255,.04) !important;border:1px solid rgba(255,255,255,.08) !important;
+  border-radius:999px;min-height:34px;padding-left:14px}
+.st-key-topbar .stTextInput input:focus{border-color:rgba(16,185,129,.55) !important;box-shadow:0 0 0 1px rgba(16,185,129,.25)}
+.st-key-open_chart_form{padding:0 !important}
+.st-key-topbar [data-testid="stFormSubmitButton"] button{background:transparent !important;
+  border:1px solid rgba(16,185,129,.5) !important;color:#10B981 !important;border-radius:999px;
+  min-height:34px;padding:0 20px;font-weight:600;letter-spacing:.3px;transition:all .25s ease}
+.st-key-topbar [data-testid="stFormSubmitButton"] button:hover{background:rgba(16,185,129,.12) !important;
+  box-shadow:0 0 16px rgba(16,185,129,.25)}
+.st-key-wheelpanel{padding:6px 4px 0 4px;margin-top:4px}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -324,23 +353,23 @@ text.t{fill:#f4f6f8;font-weight:700;pointer-events:none;paint-order:stroke;strok
 text.p{fill:#eef1f4;font-weight:600;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:1.6px;stroke-linejoin:round}
 text.ring{fill:#fff;font-weight:700;pointer-events:none}
 text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
-#tip{position:fixed;pointer-events:none;display:none;background:rgba(15,15,18,.78);-webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);
-  border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+#tip{position:fixed;pointer-events:none;display:none;background:rgba(13,13,16,.75);-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);
+  border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 12px;font-size:12px;line-height:1.5;z-index:10;box-shadow:0 12px 40px rgba(0,0,0,.6)}
 #legend{position:fixed;left:10px;bottom:8px;font-size:10px;color:#9a9a9a}
 #legend .strip{display:flex;width:470px;margin-top:3px}
 #legend .strip span{flex:1;text-align:center;padding:3px 0}
 #msg{position:fixed;top:45%;left:0;right:0;text-align:center;color:#9a9a9a;font-size:14px;display:none}
 #snd{position:fixed;top:10px;right:14px;border:0;color:#fff;border-radius:10px;font-size:13px;font-weight:700;
-  padding:4px 12px;cursor:pointer;z-index:11;background:#1e8f45}
-#snd.off{background:#c0242f}
+  padding:4px 12px;cursor:pointer;z-index:11;background:#0B8F66}
+#snd.off{background:#B3263A}
 #snd:hover{filter:brightness(1.15)}
-.side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.07);border-radius:14px;
-  padding:12px 10px 8px 10px;background:rgba(15,15,18,.65);
-  -webkit-backdrop-filter:blur(25px) saturate(160%);backdrop-filter:blur(25px) saturate(160%);box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
+.side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.08);border-radius:14px;
+  padding:12px 10px 8px 10px;background:rgba(13,13,16,.75);
+  -webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
 .side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
 .side .hd{display:inline-block}
-.side .hd.g{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
-.side .hd.r{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
+.side .hd.g{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
+.side .hd.r{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
 .side .row{display:flex;align-items:center;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;
   color:#e6e6e6;font-weight:500;cursor:pointer;overflow:hidden;white-space:nowrap}
 .side .row{transition:background .2s ease}
@@ -353,8 +382,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side .px{width:68px;text-align:right;font-variant-numeric:tabular-nums}
 .side .sc{flex:1;color:#9a9fa8;font-weight:400}
 .side .pc{width:84px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
-.side .row.g .pc{background:linear-gradient(90deg,#34D399,#059669);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
-.side .row.r .pc{background:linear-gradient(90deg,#F87171,#DC2626);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
+.side .row.g .pc{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
+.side .row.r .pc{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
 </style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
@@ -363,7 +392,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   var URLS = ["https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
-  var GREEN = ["#2bbf8a", "#169a6c", "#0c6b4b"], RED = ["#e5484d", "#c0303d", "#8a1c2c"];
+  var GREEN = ["#10B981", "#0B8F66", "#065F46"], RED = ["#EF4444", "#C62F3E", "#8B1A2B"];
   var EXP = 0.32, CLICK_DEG = 3.6;
   var args = null, lastKey = null, resizeTimer = null;
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
@@ -900,7 +929,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     function tipHtml(d) {
       var x = d.d;
       return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(x.sector) + "<br>Market Cap " + fmtCap(x.mcap) + "<br>" +
-        esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + "\">" + fmtPct(x.perf) + "</span>" +
+        esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + ";text-shadow:0 0 6px " + (x.perf >= 0 ? "rgba(16,185,129,.25)" : "rgba(239,68,68,.25)") + "\">" + fmtPct(x.perf) + "</span>" +
         "<br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
     }
     cells.on("mouseover", function (ev, d) {
@@ -945,67 +974,6 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 })();
 </script></body></html>"""
 
-
-MARKET_TILES = [("S&P 500", "FOREXCOM:SPXUSD"), ("NASDAQ 100", "FOREXCOM:NSXUSD"), ("DOW 30", "FOREXCOM:DJI"),
-                ("RUSSELL 2000", "AMEX:IWM"), ("BITCOIN", "BITSTAMP:BTCUSD"), ("GOLD", "OANDA:XAUUSD"),
-                ("OIL WTI", "TVC:USOIL"), ("DOLLAR", "CAPITALCOM:DXY")]
-
-HOME_TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet"><style>
-html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:Inter,-apple-system,"SF Pro Display",Arial,sans-serif;letter-spacing:-.005em}
-.g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1cm;padding:0 calc(2.21cm - 16px)}
-.c{position:relative;height:__CH__px;box-sizing:border-box;border:1px solid transparent;border-radius:14px;overflow:hidden;
-  background:linear-gradient(#0a0a0c,#0a0a0c) padding-box,linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.03) 55%,rgba(255,255,255,.08)) border-box;
-  box-shadow:0 12px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05)}
-.h{height:22px;line-height:22px;padding:0 10px;font-size:11px;font-weight:700;letter-spacing:.2px;color:#e6e6e6;white-space:nowrap;overflow:hidden}
-.h .chg{margin-left:2cm;font-variant-numeric:tabular-nums;display:inline-block;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.h .chg.g{background-image:linear-gradient(90deg,#34D399,#059669);filter:drop-shadow(0 0 4px rgba(52,211,153,.2)) drop-shadow(0 0 12px rgba(5,150,105,.15))}
-.h .chg.r{background-image:linear-gradient(90deg,#F87171,#DC2626);filter:drop-shadow(0 0 4px rgba(248,113,113,.2)) drop-shadow(0 0 12px rgba(220,38,38,.15))}
-.h .chg.n{background-image:none;-webkit-text-fill-color:#9aa0a8}
-</style></head><body><div class="g" id="g"></div><script>
-(function () {
-  var CHG = __CHG__, T = __TILES__, CH0 = __CH__, CH = CH0, HEAD = 22, timer = null, g = document.getElementById("g");
-  function fit() {
-    var ih = window.innerHeight || 0;
-    CH = ih > 300 ? Math.max(150, Math.min(420, Math.floor((ih - 44) / 2))) : CH0;
-  }
-  function build() {
-    fit();
-    g.innerHTML = "";
-    T.forEach(function (t, i) {
-      var c = document.createElement("div"); c.className = "c"; c.style.height = CH + "px"; g.appendChild(c);
-      var h = document.createElement("div"); h.className = "h";
-      var nm = document.createElement("span"); nm.textContent = t[0]; h.appendChild(nm);
-      var v = CHG[t[1]], ch = document.createElement("span"); ch.className = "chg";
-      if (typeof v === "number") {
-        ch.textContent = (v > 0 ? "+" : "") + v.toFixed(2) + "%"; ch.className = "chg " + (v > 0 ? "g" : (v < 0 ? "r" : "n"));
-      } else { ch.textContent = "-"; ch.className = "chg n"; }
-      h.appendChild(ch); c.appendChild(h);
-      setTimeout(function () {
-        var box = document.createElement("div"); box.className = "tradingview-widget-container";
-        box.style.height = (CH - 2 - HEAD) + "px"; box.style.width = "100%";
-        var inner = document.createElement("div"); inner.className = "tradingview-widget-container__widget";
-        inner.style.height = "100%"; box.appendChild(inner); c.appendChild(box);
-        var s = document.createElement("script"); s.type = "text/javascript"; s.async = true;
-        s.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
-        s.innerHTML = JSON.stringify({symbols: [[t[0], t[1] + "|1M"]], chartOnly: true, width: "100%", height: "100%",
-          locale: "en", colorTheme: "dark", autosize: true, showVolume: false, showMA: false, hideDateRanges: true,
-          hideMarketStatus: true, hideSymbolLogo: true, scalePosition: "right", scaleMode: "Normal",
-          fontFamily: "Arial, sans-serif", fontSize: "10", noTimeScale: false, valuesTracking: "1",
-          changeMode: "price-and-percent", chartType: "candlesticks", upColor: "#2bbf8a", downColor: "#e5484d",
-          borderUpColor: "#2bbf8a", borderDownColor: "#e5484d", wickUpColor: "#2bbf8a", wickDownColor: "#e5484d",
-          backgroundColor: "#0a0a0c", gridLineColor: "rgba(0,0,0,0)", dateRanges: ["1m|1D"]});
-        box.appendChild(s);
-        var ov = document.createElement("div");
-        ov.style.cssText = "position:absolute;left:0;right:0;top:" + HEAD + "px;bottom:64px;z-index:3";
-        c.appendChild(ov);
-      }, 0);
-    });
-  }
-  build();
-  window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(build, 500); });
-})();
-</script></body></html>"""
 
 EVENTS_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent}</style></head><body>
 <div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div>
@@ -1198,6 +1166,14 @@ def stretch(fn, *a, **k):
         return fn(*a, use_container_width=True, **k)
 
 
+def keyed(key: str):
+    """Container with a CSS class `st-key-<key>` (falls back to a plain container on old versions)."""
+    try:
+        return st.container(key=key)
+    except TypeError:
+        return st.container()
+
+
 def render_iframe(doc: str, height: int, quiet: bool = False) -> None:
     try:
         if hasattr(st, "iframe"):
@@ -1232,10 +1208,14 @@ def chart_widget(symbol: str, init_height: int = 700, offset: int = 170) -> None
 
 
 def inject_header() -> None:
-    """Global CSS, jet-black theme and the fixed S.M.Z logo with the collapsible Founder label."""
-    brand = ('<div class="smz-brand"><div class="logo">S<span>.</span>M<span>.</span>Z</div>'
-             f'<div class="fdr" tabindex="0">Founder<div class="fname">{html.escape(FOUNDER_NAME)}</div></div></div>')
-    st.markdown(CSS + brand, unsafe_allow_html=True)
+    """Global CSS: matte black canvas, liquid-glass sheets, emerald/ruby text."""
+    st.markdown(CSS, unsafe_allow_html=True)
+
+
+def brand_html() -> str:
+    """S.M.Z logo with the collapsible Founder label (sits inside the navigation row)."""
+    return ('<div class="smz-brand"><div class="logo">S<span>.</span>M<span>.</span>Z</div>'
+            f'<div class="fdr" tabindex="0">Founder<div class="fname">{html.escape(FOUNDER_NAME)}</div></div></div>')
 
 
 def inject_seo() -> None:
@@ -1353,7 +1333,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v26", path=str(d))
+        return components.declare_component("smz_bubbles_v27", path=str(d))
     except Exception:
         return None
 
@@ -1422,10 +1402,11 @@ def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_indust
 # =============================================================================
 # 6. VIEWS
 # =============================================================================
-def view_stats(day: pd.DataFrame, meta: dict) -> list:
-    """Market statistics: KPIs, breadth bar and top lists."""
+def view_stats(day: pd.DataFrame, meta: dict, show_kpi: bool = True) -> list:
+    """Market statistics: optional KPIs + breadth bar, then the top lists."""
     items: list = []
-    st.markdown(kpi_html(day), unsafe_allow_html=True)
+    if show_kpi:
+        st.markdown(kpi_html(day), unsafe_allow_html=True)
 
     lists = [
         ("Top Gainers", lambda d: d.nlargest(10, "chg")),
@@ -1470,93 +1451,15 @@ def tape_html(day: pd.DataFrame) -> str:
     return f'<div class="tape"><div class="tape-in" style="animation-duration:{dur}s">{inner}{inner}</div></div>'
 
 
-MARKET_ALTS = {
-    "FOREXCOM:SPXUSD": ["FOREXCOM:SPXUSD", "SP:SPX", "TVC:SPX", "AMEX:SPY"],
-    "FOREXCOM:NSXUSD": ["FOREXCOM:NSXUSD", "NASDAQ:NDX", "TVC:NDX", "NASDAQ:QQQ"],
-    "FOREXCOM:DJI": ["FOREXCOM:DJI", "DJ:DJI", "TVC:DJI", "AMEX:DIA"],
-    "TVC:USOIL": ["TVC:USOIL", "NYMEX:CL1!", "AMEX:USO"],
-    "CAPITALCOM:DXY": ["CAPITALCOM:DXY", "TVC:DXY", "ICEUS:DX1!", "AMEX:UUP"],
-}
-
-
-def _scan_market(market: str, tickers: list) -> dict:
-    out: dict = {}
-    try:
-        body = json.dumps({"symbols": {"tickers": tickers, "query": {"types": []}},
-                           "columns": ["close", "change"]}).encode()
-        req = urllib.request.Request(f"https://scanner.tradingview.com/{market}/scan", data=body,
-                                     headers={"User-Agent": _SA_UA, "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=4) as r:
-            data = json.loads(r.read().decode("utf-8", "ignore"))
-        for row in data.get("data", []):
-            d = row.get("d") or []
-            if len(d) >= 2 and d[1] is not None:
-                out[row["s"]] = float(d[1])
-    except Exception:
-        pass
-    return out
-
-
-def _fetch_changes(symbols: tuple) -> dict:
-    """All scanner markets are asked in parallel (about 4 s at most)."""
-    cands = {sym: MARKET_ALTS.get(sym, [sym]) for sym in symbols}
-    wanted = list(dict.fromkeys(x for v in cands.values() for x in v))
-    found: dict = {}
-    ex = ThreadPoolExecutor(max_workers=5)
-    futs = [ex.submit(_scan_market, m, wanted) for m in ("america", "cfd", "forex", "crypto", "global")]
-    try:
-        for f in as_completed(futs, timeout=6):
-            found.update(f.result())
-    except Exception:
-        pass
-    ex.shutdown(wait=False, cancel_futures=True)
-    out: dict = {}
-    for sym, alts in cands.items():
-        for c in alts:
-            if c in found:
-                out[sym] = found[c]
-                break
-    return out
-
-
-@st.cache_resource(show_spinner=False)
-def _market_store() -> dict:
-    return {"data": {}, "ts": 0.0, "busy": False}
-
-
-def market_changes(symbols: tuple) -> dict:
-    """Today's change in % per chart symbol. Served from memory instantly; refreshed in the background."""
-    store = _market_store()
-
-    def refresh() -> None:
-        store["busy"] = True
-        try:
-            new = _fetch_changes(symbols)
-            if new:
-                store["data"] = {**store["data"], **new}
-            store["ts"] = time.time()
-        finally:
-            store["busy"] = False
-
-    age = time.time() - store["ts"]
-    if not store["data"] and age > 60 and not store["busy"]:
-        refresh()  # first visit (or after a failed attempt more than a minute ago)
-    elif store["data"] and age > 60 and not store["busy"]:
-        threading.Thread(target=refresh, daemon=True).start()
-    return dict(store["data"])
-
-
-def home_charts_doc(ch: int = 215) -> str:
-    tiles = json.dumps([[n, sym] for n, sym in MARKET_TILES])
-    chg = json.dumps({k: round(v, 2) for k, v in market_changes(tuple(sym for _, sym in MARKET_TILES)).items()})
-    return (HOME_TEMPLATE.replace("__CHG__", chg).replace("__TILES__", tiles).replace("__CH__", str(int(ch))))
-
-
 def view_home(day: pd.DataFrame, meta: dict) -> list:
-    """Home: ticker tape of all companies, then index / bitcoin / gold / oil / dollar charts."""
+    """Home: ticker tape, market summary (KPIs + breadth), then the interactive wheel map.
+    The detailed top lists of the old Overview tab are tucked below in a collapsed block."""
     st.markdown(tape_html(day), unsafe_allow_html=True)
-    render_iframe(home_charts_doc(215), 2 * 215 + 44)
-    return []
+    st.markdown(kpi_html(day), unsafe_allow_html=True)
+    items = list(view_bubbles(day, meta))
+    if st.toggle("Show market leaders (top lists)", key="show_stats", value=False):
+        items += view_stats(day, meta, show_kpi=False)
+    return items
 
 
 # ---- news (source: stockanalysis.com) ------------------------------------------
@@ -1807,14 +1710,6 @@ def view_news(day: pd.DataFrame, meta: dict) -> list:
     return []
 
 
-def view_overview(day: pd.DataFrame, meta: dict) -> list:
-    """Overview = bubble map first; KPIs and top lists are tucked below in a collapsed block."""
-    items = list(view_bubbles(day, meta))
-    if st.toggle("Show market statistics (KPIs & top lists)", key="show_stats", value=False):
-        items += view_stats(day, meta)
-    return items
-
-
 def _pick_sector(name: str) -> None:
     S["bub_sector"] = name
 
@@ -1864,13 +1759,11 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
 
     gainers = _rank(valid.nlargest(21, perf_col))
     losers = _rank(valid.nsmallest(21, perf_col))
-    ev = comp(nodes=nodes, scale=scale, perf_label=label, gainers=gainers, losers=losers,
-              mode="all", key="smz_bubbles", default=None)
+    with keyed("wheelpanel"):
+        ev = comp(nodes=nodes, scale=scale, perf_label=label, gainers=gainers, losers=losers,
+                  mode="all", key="smz_bubbles", default=None)
 
-    try:
-        box = st.container(key="secbox")
-    except TypeError:
-        box = st.container()
+    box = keyed("secbox")
     with box:
         st.markdown('<div class="ttl">Sectors</div>', unsafe_allow_html=True)
         names = ["All"] + sector_names
@@ -2014,24 +1907,39 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
 # 8. MAIN
 # =============================================================================
 def header(dates: list) -> tuple[str, Optional[str]]:
-    c = st.columns([1.6, 1.0, 3.4])
-    opts = ["Home", "Overview", "Screener", "News"]
-    with c[0]:
-        if hasattr(st, "segmented_control"):
-            view = st.segmented_control("View", opts, default="Home", key="view", label_visibility="collapsed")
-        else:
-            view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed")
-    c[1].selectbox("Date", dates, key="date", label_visibility="collapsed")
+    """One sharp navigation row: brand | Home - Screener - News | date | search + Go."""
+    opts = ["Home", "Screener", "News"]
+    if S.get("view") not in opts:  # e.g. a stale "Overview" from an older session
+        S.pop("view", None)
     forced = None
-    with c[2]:
-        with st.form("open_chart_form", border=False):
-            f = st.columns([3, 1])
-            q = f[0].text_input("Search", key="open_q", placeholder="Search ticker", label_visibility="collapsed")
-            go_ = f[1].form_submit_button("Go")
-        if go_:
-            forced = clean_symbol(q)
-            if forced is None:
-                st.warning("Enter a valid ticker (letters and digits only).")
+    with keyed("topbar"):
+        spec = [1.0, 2.1, 1.1, 3.0]
+        try:
+            c = st.columns(spec, vertical_alignment="center")
+        except TypeError:
+            c = st.columns(spec)
+        c[0].markdown(brand_html(), unsafe_allow_html=True)
+        with c[1]:
+            with keyed("nav"):
+                if hasattr(st, "segmented_control"):
+                    view = st.segmented_control("View", opts, default="Home", key="view",
+                                                label_visibility="collapsed")
+                else:
+                    view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed")
+        c[2].selectbox("Date", dates, key="date", label_visibility="collapsed")
+        with c[3]:
+            with st.form("open_chart_form", border=False):
+                try:
+                    f = st.columns([4, 1], vertical_alignment="center")
+                except TypeError:
+                    f = st.columns([4, 1])
+                q = f[0].text_input("Search", key="open_q", placeholder="Search ticker",
+                                    label_visibility="collapsed")
+                go_ = f[1].form_submit_button("Go")
+            if go_:
+                forced = clean_symbol(q)
+                if forced is None:
+                    st.warning("Enter a valid ticker (letters and digits only).")
     return view or "Home", forced
 
 
@@ -2068,8 +1976,6 @@ def main() -> None:
         items = view_home(day, meta)
     elif view == "News":
         items = view_news(day, meta)
-    elif view == "Overview":
-        items = view_overview(day, meta)
     else:
         items = view_screener(day, meta)
 
