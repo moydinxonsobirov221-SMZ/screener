@@ -106,13 +106,16 @@ SHORT = {"Any": None, "Low (<5%)": (0, 5), "High (>20%)": (20, INF),
          **{f"Under {v}%": (0, v) for v in (5, 10, 15, 20, 25, 30)},
          **{f"Over {v}%": (v, INF) for v in (5, 10, 15, 20, 25, 30)}}
 EXCHANGES = ["Any", "AMEX", "NASDAQ", "NYSE"]
+# market-cap options focused on small caps (under $2bln)
+MCAP_DT = {"Any": None, "Under $2bln": (0, 2000), "Small ($300mln to $2bln)": (300, 2000),
+           "Micro ($50mln to $300mln)": (50, 300), "Nano (under $50mln)": (0, 50),
+           "Under $300mln": (0, 300), "Over $2bln": (2000, INF)}
 EXCH_CODES = {"NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NAS": "NASDAQ", "NYQ": "NYSE", "NYS": "NYSE",
               "ASE": "AMEX", "PCX": "AMEX", "BTS": "BATS", "BATS": "BATS"}
 
 # default value of every filter widget (the key is also the session_state key)
-D = dict(exch="Any", sector="Any", industry="Any", price="Any", vol="Any", avgvol="Any", relvol="Any",
-         chg="Any", gap="Any", atr="Any", rsi="Any", pw="Any", pm="Any", pq="Any", s20="Any", s50="Any",
-         s200="Any", hl52="Any", mcap="Any", flt="Any", short="Any", q="")
+D = dict(exch="Any", price="Any", avgvol="Any", relvol="Any", chg="Any", gap="Any", atr="Any", rsi="Any",
+         s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any", q="")
 
 SIGNALS = {
     "None": {},
@@ -126,7 +129,7 @@ SIGNALS = {
     "Overbought": dict(rsi="Overbought (70)", sort_by="RSI", sort_asc=False),
     "Oversold": dict(rsi="Oversold (30)", sort_by="RSI", sort_asc=True),
     "Gap Up": dict(gap="Up 5%", relvol="Over 2", sort_by="Gap", sort_asc=False),
-    "Low Float Runner": dict(flt="Under 20M", relvol="Over 2", chg="Up 3%", sort_by="Change", sort_asc=False),
+    "Low Price Runner": dict(price="Under $10", relvol="Over 2", chg="Up 3%", sort_by="Change", sort_asc=False),
 }
 
 COLS = {"ticker": "Ticker", "sector": "Sector", "industry": "Industry", "mcap": "Market Cap",
@@ -286,6 +289,56 @@ div[data-testid="stDialog"] div[role="dialog"]{width:98vw !important;max-width:9
 .st-key-topbar [data-testid="stFormSubmitButton"] button:hover{background:rgba(16,185,129,.12) !important;
   box-shadow:0 0 16px rgba(16,185,129,.25)}
 .st-key-wheelpanel{padding:6px 4px 0 4px;margin-top:4px}
+
+/* ---- liquid-glass dropdowns, inputs and buttons ---- */
+div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{
+  background:rgba(20,20,25,.6) !important;-webkit-backdrop-filter:blur(15px);backdrop-filter:blur(15px);
+  border:1px solid rgba(255,255,255,.05) !important;border-radius:10px;min-height:34px;
+  font-size:.82rem;font-weight:500;color:#e8eaee !important;transition:border-color .25s ease,box-shadow .25s ease}
+div[data-baseweb="select"] > div:hover,.stTextInput input:hover{border-color:rgba(255,255,255,.12) !important}
+div[data-baseweb="select"] > div:focus-within,.stTextInput input:focus{border-color:rgba(16,185,129,.45) !important;
+  box-shadow:0 0 0 1px rgba(16,185,129,.18)}
+div[data-baseweb="select"] *{color:#e8eaee}
+div[data-baseweb="select"] svg{fill:#8b95a5}
+.stTextInput input::placeholder{color:#5d6472}
+div[data-baseweb="popover"] > div,div[data-baseweb="menu"],ul[role="listbox"]{
+  background:rgba(20,20,25,.92) !important;-webkit-backdrop-filter:blur(15px);backdrop-filter:blur(15px);
+  border:1px solid rgba(255,255,255,.05);border-radius:10px}
+li[role="option"]{background:transparent !important;color:#e8eaee !important;font-size:.82rem}
+li[role="option"]:hover,li[role="option"][aria-selected="true"]{background:rgba(255,255,255,.06) !important}
+.stButton button,.stDownloadButton button,[data-testid="stDownloadButton"] button,
+button[data-testid="stBaseButton-secondary"]{background:rgba(20,20,25,.6) !important;
+  -webkit-backdrop-filter:blur(15px);backdrop-filter:blur(15px);border:1px solid rgba(255,255,255,.05) !important;
+  border-radius:10px;min-height:34px;color:#e8eaee !important;font-size:.82rem;font-weight:500;
+  transition:all .25s ease}
+.stButton button:hover,.stDownloadButton button:hover,[data-testid="stDownloadButton"] button:hover,
+button[data-testid="stBaseButton-secondary"]:hover{border-color:rgba(16,185,129,.4) !important;
+  background:rgba(30,30,36,.7) !important;box-shadow:0 0 14px rgba(16,185,129,.12)}
+[data-testid="stCheckbox"] label p{font-size:.82rem !important;color:#c4c8cf !important}
+
+/* ---- screener: filter grid, control bar, table panel ---- */
+.st-key-filtergrid,.st-key-tablepanel{background:rgba(13,13,16,.75) !important;border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);
+  box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
+.st-key-filtergrid{padding:10px 16px 12px 16px;margin:2px 0 8px 0}
+.st-key-tablepanel{padding:4px;overflow:hidden}
+.st-key-filtergrid [data-testid="stTabs"] [role="tablist"]{gap:6px;border-bottom:1px solid rgba(255,255,255,.06)}
+.st-key-filtergrid [data-testid="stTabs"] button{color:#7d8594;font-weight:500;padding:6px 14px;border-radius:0;
+  background:transparent !important;border:0 !important;min-height:0}
+.st-key-filtergrid [data-testid="stTabs"] button p{font-size:.86rem;color:inherit !important;margin:0}
+.st-key-filtergrid [data-testid="stTabs"] button[aria-selected="true"]{color:#fff;font-weight:600}
+.st-key-filtergrid [data-baseweb="tab-highlight"]{background:#10B981 !important;height:1px !important}
+.st-key-filtergrid [data-baseweb="tab-border"]{background:transparent !important}
+.st-key-filtergrid [data-baseweb="tab-panel"]{min-height:86px;padding-top:12px;
+  animation:smzfade .38s cubic-bezier(0.16,1,0.3,1)}
+@keyframes smzfade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.st-key-filtergrid div[data-testid="stHorizontalBlock"]{gap:.8rem}
+.resline{font-size:.82rem;color:#9aa0a8;line-height:1.2}
+.resline b{color:#e6e8ec;font-weight:600}
+.st-key-ctrlbar{margin:4px 0 8px 0}
+.st-key-ctrlbar div[data-testid="stHorizontalBlock"]{align-items:center}
+.st-key-ctrlbar [data-testid="stCheckbox"]{display:flex;align-items:center;min-height:34px}
+.st-key-ctrlbar [data-testid="stSelectbox"] > div{margin:0}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -1100,27 +1153,18 @@ def apply_filters(day: pd.DataFrame, s, meta: dict) -> pd.DataFrame:
     x = day
     if s["exch"] != "Any":
         x = x[x["exch"] == s["exch"]]
-    if s["sector"] != "Any":
-        x = x[x["sector"] == s["sector"]]
-    if meta["has_industry"] and s["industry"] != "Any":
-        x = x[x["industry"] == s["industry"]]
     x = _opt(x, "close", PRICE, s["price"])
-    x = _opt(x, "volume", VOLUME, s["vol"])
     x = _opt(x, "avgvol", VOLUME, s["avgvol"])
     x = _opt(x, "relvol", RELVOL, s["relvol"])
     x = _opt(x, "chg", CHANGE, s["chg"])
     x = _opt(x, "gap", GAP, s["gap"])
     x = _opt(x, "atr", ATR_OPT, s["atr"])
     x = _opt(x, "rsi", RSI_OPT, s["rsi"])
-    for col, key in (("pw", "pw"), ("pm", "pm"), ("pq", "pq")):
-        x = _opt(x, col, PERF, s[key])
     for n in (20, 50, 200):
         x = _opt(x, f"d{n}", SMA_OPTS[n], s[f"s{n}"])
     x = _hl52(x, s["hl52"])
     if meta["has_fund"]:
-        x = _opt(x, "mcap", MCAP, s["mcap"])
-        x = _opt(x, "float_sh", FLOAT, s["flt"])
-        x = _opt(x, "short_pct", SHORT, s["short"])
+        x = _opt(x, "mcap", MCAP_DT, s["mcap"])
     if str(s["q"]).strip():
         x = x[x["ticker"].str.contains(str(s["q"]).strip().upper(), regex=False)]
     return x
@@ -1807,74 +1851,253 @@ def _sel(col, label, options, key, disabled=False):
     col.selectbox(label, list(options), key=key, disabled=disabled)
 
 
+def reset_all() -> None:
+    reset_filters()
+    S["signal"] = "None"
+
+
+def _n_active() -> int:
+    return sum(1 for k, v in D.items() if S.get(k, v) != v)
+
+
 def filter_ui(day: pd.DataFrame, meta: dict) -> None:
-    top = st.columns([2, 1])
-    top[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
-    top[1].write("")
-    top[1].button("Reset", on_click=reset_filters, key="reset_btn")
-    tabs = st.tabs(["Descriptive", "Technical", "Trend", "Fundamental"])
-    with tabs[0]:
-        a = st.columns(6)
-        a[0].text_input("Ticker", key="q")
-        _sel(a[1], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
-        _sel(a[2], "Sector", ["Any"] + sorted(day["sector"].dropna().unique()), "sector")
-        _sel(a[3], "Industry", ["Any"] + sorted(day["industry"].dropna().unique()), "industry",
-             disabled=not meta["has_industry"])
-        _sel(a[4], "Price", PRICE, "price")
-        _sel(a[5], "Average Volume", VOLUME, "avgvol")
-        b = st.columns(6)
-        _sel(b[0], "Relative Volume", RELVOL, "relvol")
-        _sel(b[1], "Volume", VOLUME, "vol")
-    with tabs[1]:
-        c = st.columns(6)
-        _sel(c[0], "Change", CHANGE, "chg")
-        _sel(c[1], "Gap", GAP, "gap")
-        _sel(c[2], "Average True Range", ATR_OPT, "atr")
-        _sel(c[3], "RSI (14)", RSI_OPT, "rsi")
-        _sel(c[4], "Performance (Week)", PERF, "pw")
-        _sel(c[5], "Performance (Month)", PERF, "pm")
-        c2 = st.columns(6)
-        _sel(c2[0], "Performance (Quarter)", PERF, "pq")
-    with tabs[2]:
-        t = st.columns(6)
-        _sel(t[0], "20-Day Simple Moving Average", SMA_OPTS[20], "s20")
-        _sel(t[1], "50-Day Simple Moving Average", SMA_OPTS[50], "s50")
-        _sel(t[2], "200-Day Simple Moving Average", SMA_OPTS[200], "s200")
-        _sel(t[3], "52-Week High/Low", HL52, "hl52")
-    with tabs[3]:
-        if not meta["has_fund"]:
-            st.info("Fundamental data is still loading. It fills in automatically within a few hours.")
-        f = st.columns(6)
-        _sel(f[0], "Market Cap.", MCAP, "mcap", disabled=not meta["has_fund"])
-        _sel(f[1], "Float", FLOAT, "flt", disabled=not meta["has_fund"])
-        _sel(f[2], "Short Float", SHORT, "short", disabled=not meta["has_fund"])
+    """Compact Finviz-style grid for day / swing traders: three tabs, one row of six slots each,
+    so switching tabs never changes the height of the block."""
+    with keyed("filtergrid"):
+        try:
+            head = st.columns([6, 1.1], vertical_alignment="center")
+        except TypeError:
+            head = st.columns([6, 1.1])
+        head[0].markdown(f'<div class="resline"><b>Filters</b> &nbsp;|&nbsp; {_n_active()} active</div>',
+                         unsafe_allow_html=True)
+        head[1].button("Reset", on_click=reset_all, key="reset_btn")
+        tabs = st.tabs(["Descriptive", "Technical", "Trend"])
+        with tabs[0]:
+            a = st.columns(6)
+            a[0].text_input("Ticker", key="q", placeholder="e.g. AAPL")
+            _sel(a[1], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
+            _sel(a[2], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
+            _sel(a[3], "Average Volume", VOLUME, "avgvol")
+            _sel(a[4], "Relative Volume", RELVOL, "relvol")
+            _sel(a[5], "Price", PRICE, "price")
+        with tabs[1]:
+            b = st.columns(6)
+            b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
+            _sel(b[1], "Change", CHANGE, "chg")
+            _sel(b[2], "Gap %", GAP, "gap")
+            _sel(b[3], "ATR", ATR_OPT, "atr")
+            _sel(b[4], "RSI (14)", RSI_OPT, "rsi")
+        with tabs[2]:
+            t = st.columns(6)
+            _sel(t[0], "SMA20", SMA_OPTS[20], "s20")
+            _sel(t[1], "SMA50", SMA_OPTS[50], "s50")
+            _sel(t[2], "SMA200", SMA_OPTS[200], "s200")
+            _sel(t[3], "52-Week High/Low", HL52, "hl52")
+
+
+# ---- institutional data table (custom component: row hover, zebra rows, glowing numbers) ----
+TEXT_COLS = {"Ticker", "Sector", "Industry"}
+
+TABLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:Inter,-apple-system,"SF Pro Display","Segoe UI",Arial,sans-serif;color:#e6e8ec;letter-spacing:-.003em}
+#wrap{overflow:auto;position:relative;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th{position:sticky;top:0;z-index:2;background:rgba(10,10,13,.97);color:#8b95a5;font-weight:600;font-size:11.5px;text-align:right;
+  padding:0 14px;height:34px;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.08)}
+th.l,td.l{text-align:left}
+th.on{color:#e6e8ec}
+th.on i{font-style:normal;color:#10B981;margin-left:5px;font-size:9px}
+td{height:28px;padding:0 14px;text-align:right;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.03);background:transparent;
+  transition:background .45s cubic-bezier(0.16,1,0.3,1),box-shadow .45s cubic-bezier(0.16,1,0.3,1)}
+tbody tr{cursor:pointer}
+tbody tr:nth-child(even) td{background:rgba(255,255,255,.018)}
+tbody tr:hover td{background:rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+td.tk{font-weight:700;color:#fff;letter-spacing:.2px}
+td.no{color:#5d6472;text-align:center}
+td.sc{color:#9aa0a8}
+th.s,td.s{position:sticky}
+th.s{z-index:3}
+td.s{z-index:1;background:#0c0c0f}
+tbody tr:nth-child(even) td.s{background:#101013}
+tbody tr:hover td.s{background:#18181d}
+th.s0,td.s0{left:0;width:46px;min-width:46px;max-width:46px;padding:0;text-align:center}
+th.s1,td.s1{left:46px;min-width:84px}
+.g{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
+.r{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
+</style></head><body><div id="wrap"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
+<script>
+(function () {
+  "use strict";
+  var args = null, lastKey = null, data = [], shown = 0, CH = 150;
+  var wrap = document.getElementById("wrap"), th = document.getElementById("th"), tb = document.getElementById("tb");
+  function post(type, extra) {
+    window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, extra || {}), "*");
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+    });
+  }
+  function tone(t) {
+    if (t === "-") { return ""; }
+    var n = parseFloat(String(t).replace(/,/g, ""));
+    if (isNaN(n) || n === 0) { return ""; }
+    return n > 0 ? "g" : "r";
+  }
+  function rowHtml(i) {
+    var r = data[i], h = '<tr data-t="' + esc(r[1]) + '">', j, c, v;
+    for (j = 0; j < r.length; j++) {
+      v = r[j]; c = [];
+      if (j === 0) { c.push("s", "s0", "no"); }
+      else if (j === 1) { c.push("s", "s1", "l", "tk"); }
+      else {
+        if (args.left[j]) { c.push("l"); if (args.heads[j] === "Sector") { c.push("sc"); } }
+        if (args.colored[j]) { c.push(tone(v)); }
+      }
+      h += '<td class="' + c.join(" ") + '">' + esc(v) + "</td>";
+    }
+    return h + "</tr>";
+  }
+  function more() {
+    if (shown >= data.length) { return; }
+    var end = Math.min(data.length, shown + CH), h = "", i;
+    for (i = shown; i < end; i++) { h += rowHtml(i); }
+    tb.insertAdjacentHTML("beforeend", h);
+    shown = end;
+  }
+  function build() {
+    var H = +args.height || 640, hs = "<tr>", j, c, on;
+    wrap.style.height = H + "px";
+    for (j = 0; j < args.heads.length; j++) {
+      c = [];
+      if (j === 0) { c.push("s", "s0"); } else if (j === 1) { c.push("s", "s1", "l"); } else if (args.left[j]) { c.push("l"); }
+      on = args.heads[j] === args.sort_label;
+      if (on) { c.push("on"); }
+      hs += '<th class="' + c.join(" ") + '">' + esc(args.heads[j]) +
+        (on ? "<i>" + (args.asc ? "\u25B2" : "\u25BC") + "</i>" : "") + "</th>";
+    }
+    th.innerHTML = hs + "</tr>";
+    tb.innerHTML = ""; shown = 0; data = args.rows || [];
+    more();
+    while (shown < data.length && wrap.scrollHeight < wrap.clientHeight + 300) { more(); }
+    post("streamlit:setFrameHeight", {height: H});
+  }
+  wrap.addEventListener("scroll", function () {
+    if (wrap.scrollTop + wrap.clientHeight > wrap.scrollHeight - 300) { more(); }
+  });
+  tb.addEventListener("click", function (e) {
+    var tr = e.target.closest ? e.target.closest("tr") : null;
+    if (!tr) { return; }
+    post("streamlit:setComponentValue", {value: {ticker: tr.getAttribute("data-t"), n: Date.now() + Math.random()},
+                                         dataType: "json"});
+  });
+  window.addEventListener("message", function (e) {
+    if (!e.data || e.data.type !== "streamlit:render") { return; }
+    args = e.data.args || {};
+    var key = JSON.stringify(args);
+    post("streamlit:setFrameHeight", {height: +args.height || 640});
+    if (key === lastKey) { return; }
+    lastKey = key;
+    build();
+  });
+  post("streamlit:componentReady", {apiVersion: 1});
+})();
+</script></body></html>"""
+
+
+def _write_component(dirname: str, content: str) -> Optional[Path]:
+    for base in (Path(__file__).resolve().parent, Path(tempfile.gettempdir())):
+        try:
+            d = base / dirname
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / "index.html"
+            if not f.exists() or f.read_text(encoding="utf-8") != content:
+                f.write_text(content, encoding="utf-8")
+            return d
+        except Exception:
+            continue
+    return None
+
+
+@st.cache_resource(show_spinner=False)
+def get_table_component():
+    if components is None:
+        return None
+    d = _write_component("_smz_table", TABLE_HTML)
+    if d is None:
+        return None
+    try:
+        return components.declare_component("smz_table_v1", path=str(d))
+    except Exception:
+        return None
+
+
+def _cell(label: str, v) -> str:
+    if label == "No.":
+        return str(int(v))
+    if label in TEXT_COLS:
+        return "-" if pd.isna(v) else str(v)
+    if pd.isna(v):
+        return "-"
+    f = FMT.get(label)
+    if f is None:
+        return str(v)
+    return f(v) if callable(f) else f.format(v)
+
+
+def render_screener_table(full: pd.DataFrame, height: int = 640) -> tuple[Optional[str], Optional[str]]:
+    """Glass data table. Click any row to open its chart. Falls back to the plain grid if needed."""
+    comp = get_table_component()
+    if comp is None:
+        return render_table(full, "tbl_screener", height)
+    labels = list(full.columns)
+    shown = full.head(4000)
+    cols = [[_cell(lb, v) for v in shown[lb].tolist()] for lb in labels]
+    rows = [list(r) for r in zip(*cols)]
+    with keyed("tablepanel"):
+        ev = comp(heads=labels, rows=rows, colored=[lb in COLOR_COLS for lb in labels],
+                  left=[lb in TEXT_COLS for lb in labels], sort_label=str(S.get("sort_by", "")),
+                  asc=bool(S.get("sort_asc", False)), height=int(height), key="smz_table", default=None)
+    if isinstance(ev, dict) and ev.get("ticker"):
+        sym = clean_symbol(str(ev["ticker"]))
+        if sym:
+            return f"tbl:{ev.get('n')}", sym
+    return None, None
 
 
 def view_screener(day: pd.DataFrame, meta: dict) -> list:
-    """Filters + compact multi-column table. Click any cell of a row to open its chart."""
-    with st.expander("Filters", expanded=True):
-        filter_ui(day, meta)
+    """Filter grid + control bar + glass table. Click any row to open its chart."""
+    filter_ui(day, meta)
     x = apply_filters(day, S, meta)
 
-    order = ["ticker", "sector"] + (["industry"] if meta["has_industry"] else []) + \
-            (list(FUND_COLS) if meta["has_fund"] else []) + \
+    order = ["ticker", "sector"] + (["mcap"] if meta["has_fund"] else []) + \
             ["close", "chg", "gap", "volume", "avgvol", "relvol", "atr", "rsi", "d20", "d50", "d200",
              "hid", "lod", "pw", "pm", "pq"]
     names = [COLS[c] for c in order]
     if S.get("sort_by") not in names:
         S["sort_by"] = "Change"
-    bar = st.columns([3, 1.4, 1, 1])
-    bar[0].markdown(f"**{S['date']}: {len(x)} stocks** &nbsp;|&nbsp; click any row to open its chart")
-    bar[1].selectbox("Order", names, key="sort_by", label_visibility="collapsed")
-    bar[2].checkbox("Ascending", key="sort_asc")
-    inv = {v: k for k, v in COLS.items()}
-    x = x.sort_values(inv[S["sort_by"]], ascending=bool(S["sort_asc"]))
+    with keyed("ctrlbar"):
+        spec = [4.4, 1.6, 1.1, 1.0]
+        try:
+            bar = st.columns(spec, vertical_alignment="center")
+        except TypeError:
+            bar = st.columns(spec)
+        bar[0].markdown(f'<div class="resline"><b>{S["date"]}</b> &nbsp;|&nbsp; {len(x)} stocks '
+                        '&nbsp;|&nbsp; click a row to open its chart</div>', unsafe_allow_html=True)
+        bar[1].selectbox("Order", names, key="sort_by", label_visibility="collapsed")
+        bar[2].checkbox("Ascending", key="sort_asc")
+        inv = {v: k for k, v in COLS.items()}
+        x = x.sort_values(inv[S["sort_by"]], ascending=bool(S["sort_asc"]))
+        if not x.empty:
+            full = to_display(x, order, with_no=True)
+            bar[3].download_button("Export", full.round(2).to_csv(index=False).encode(), "smz_screener.csv",
+                                   "text/csv")
     if x.empty:
         st.info("No stocks match these filters. Try loosening them.")
         return []
-    full = to_display(x, order, with_no=True)
-    bar[3].download_button("Export", full.round(2).to_csv(index=False).encode(), "smz_screener.csv", "text/csv")
-    return [render_table(full, "tbl_screener", 640)]
+    return [render_screener_table(full, 640)]
 
 
 # =============================================================================
