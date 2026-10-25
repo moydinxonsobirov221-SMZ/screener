@@ -115,7 +115,7 @@ EXCH_CODES = {"NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NAS": "NASDAQ"
 
 # default value of every filter widget (the key is also the session_state key)
 D = dict(exch="Any", price="Any", avgvol="Any", relvol="Any", chg="Any", gap="Any", atr="Any", rsi="Any",
-         s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any", q="")
+         s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any")
 
 SIGNALS = {
     "None": {},
@@ -333,14 +333,28 @@ button[data-testid="stBaseButton-secondary"]:hover{border-color:rgba(16,185,129,
   animation:smzfade .38s cubic-bezier(0.16,1,0.3,1)}
 @keyframes smzfade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .st-key-filtergrid div[data-testid="stHorizontalBlock"]{gap:.8rem}
-.fsec{font-size:.82rem;font-weight:600;color:#cfd6e0;margin:8px 0 4px 0;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.06)}
-.fsec:first-of-type{margin-top:2px}
+.fsec{font-size:1.25rem;font-weight:600;letter-spacing:-.02em;color:rgba(255,255,255,.95);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",sans-serif;
+  margin:22px 0 10px 0;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.07)}
 .resline{font-size:.82rem;color:#9aa0a8;line-height:1.2}
 .resline b{color:#e6e8ec;font-weight:600}
 .st-key-ctrlbar{margin:4px 0 8px 0}
 .st-key-ctrlbar div[data-testid="stHorizontalBlock"]{align-items:center}
 .st-key-ctrlbar [data-testid="stCheckbox"]{display:flex;align-items:center;min-height:34px}
 .st-key-ctrlbar [data-testid="stSelectbox"] > div{margin:0}
+
+/* ---- Apple-grade navigation ---- */
+.st-key-nav button{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",sans-serif !important;
+  color:#ffffff !important;opacity:.55;min-height:38px;padding:6px 16px;
+  border-bottom:2px solid transparent !important;box-shadow:none !important;
+  transition:opacity .35s cubic-bezier(0.16,1,0.3,1),border-color .35s cubic-bezier(0.16,1,0.3,1),
+             box-shadow .35s cubic-bezier(0.16,1,0.3,1)}
+.st-key-nav button p{font-family:inherit !important;font-size:1.15rem !important;font-weight:500 !important;
+  letter-spacing:-.01em;color:inherit !important;margin:0}
+.st-key-nav button:hover{opacity:.85}
+.st-key-nav button[kind="segmented_controlActive"],.st-key-nav button[data-testid="stBaseButton-segmented_controlActive"]{
+  opacity:1;border-bottom:2px solid #10B981 !important;font-weight:500;
+  box-shadow:0 9px 14px -10px rgba(16,185,129,.75) !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -402,7 +416,9 @@ BUBBLE_HTML = r"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:Inter,-apple-system,"SF Pro Display",Arial,Helvetica,sans-serif;color:#e6e6e6;letter-spacing:-.005em}
-svg{display:block;margin:0 auto;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+svg{display:block;margin:0 auto;background:transparent;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+  transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden}
+.ctr{transform:rotate(calc(var(--rot,0deg) * -1))}
 .leaf{cursor:pointer}
 text.t{fill:#f4f6f8;font-weight:700;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px;stroke-linejoin:round}
 text.p{fill:#eef1f4;font-weight:600;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:1.6px;stroke-linejoin:round}
@@ -782,7 +798,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       if (i % 50 === 0) { majP += seg; } else if (i % 5 === 0) { midP += seg; } else { minorP += seg; }
     }
     rg.append("circle").attr("r", R3).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
-      .attr("stroke-width", 1.2).style(NS, "non-scaling-stroke").style("filter", "drop-shadow(0 0 6px rgba(255,255,255,.25))");
+      .attr("stroke-width", 1.2).style(NS, "non-scaling-stroke");
     [[minorP, 0.8, 0.55], [midP, 1.1, 0.85], [majP, 1.8, 1]].forEach(function (t) {
       rg.append("path").attr("d", t[0]).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-width", t[1])
         .attr("stroke-opacity", t[2]).style(NS, "non-scaling-stroke");
@@ -790,7 +806,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     rg.append("circle").attr("r", R2).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.6)
       .attr("stroke-width", 1).style(NS, "non-scaling-stroke");
     rg.append("circle").attr("r", R).attr("fill", "rgba(5,5,8,.88)").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
-      .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").style("filter", "drop-shadow(0 0 7px rgba(255,255,255,.22))");
+      .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke");
 
     /* ---- map cells ---- */
     var all = [];
@@ -827,10 +843,12 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         }
       });
     } else {
-      labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none");
-      var tickers = labs.append("text").attr("class", "t").attr("text-anchor", "middle")
+      labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none")
+        .attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ")"; });
+      var ctr = labs.append("g").attr("class", "ctr");
+      var tickers = ctr.append("text").attr("class", "t").attr("text-anchor", "middle")
         .text(function (d) { return d.d.ticker; });
-      var pcts = labs.append("text").attr("class", "p").attr("text-anchor", "middle")
+      var pcts = ctr.append("text").attr("class", "p").attr("text-anchor", "middle")
         .text(function (d) { return fmtPct(d.d.perf); });
       tickers.each(function (d) {
         var rk = d.r, fs = clamp(6, 16, rk * 0.5);
@@ -887,17 +905,23 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       .attr("fill", "#ffffff").attr("pointer-events", "none");
 
     /* ---- turning the dial ---- */
+    /* one style write per frame: the dial turns on the GPU, labels counter-rotate through a CSS variable */
+    var rgNode = rg.node(), pendingFrame = false;
+    rgNode.style.willChange = "transform";
     applyRot = function (deg) {
-      rg.attr("transform", "rotate(" + deg.toFixed(2) + ")");
-      if (labs) {
-        labs.attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ") rotate(" + (-deg).toFixed(2) + ")"; });
-      }
+      var v = deg.toFixed(2) + "deg";
+      rgNode.style.setProperty("--rot", v);
+      rgNode.style.transform = "rotate(" + v + ") translate3d(0,0,0)";
     };
-    function setRot(deg) {
+    function setRot(deg, now) {
       rot = deg;
-      applyRot(rot);
       var st = Math.floor(rot / CLICK_DEG);
       if (st !== lastStep) { lastStep = st; tik(); }
+      if (now) { applyRot(rot); return; }
+      if (!pendingFrame) {                      /* coalesce pointer events into one paint per frame */
+        pendingFrame = true;
+        requestAnimationFrame(function () { pendingFrame = false; applyRot(rot); });
+      }
     }
     lastStep = Math.floor(rot / CLICK_DEG);
     applyRot(rot);
@@ -908,7 +932,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       var last = performance.now();
       (function stepFn(now) {
         var dt = Math.min(0.05, (now - last) / 1000); last = now;
-        setRot(rot + vel * dt);
+        setRot(rot + vel * dt, true);
         vel *= Math.exp(-2.4 * dt);
         if (Math.abs(vel) < 6) { raf = null; return; }
         raf = requestAnimationFrame(stepFn);
@@ -1167,8 +1191,6 @@ def apply_filters(day: pd.DataFrame, s, meta: dict) -> pd.DataFrame:
     x = _hl52(x, s["hl52"])
     if meta["has_fund"]:
         x = _opt(x, "mcap", MCAP_DT, s["mcap"])
-    if str(s["q"]).strip():
-        x = x[x["ticker"].str.contains(str(s["q"]).strip().upper(), regex=False)]
     return x
 
 
@@ -1379,7 +1401,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v27", path=str(d))
+        return components.declare_component("smz_bubbles_v28", path=str(d))
     except Exception:
         return None
 
@@ -1875,12 +1897,11 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
 
         st.markdown('<div class="fsec">Descriptive Filters</div>', unsafe_allow_html=True)
         a = st.columns(6)
-        a[0].text_input("Ticker", key="q", placeholder="e.g. AAPL")
-        _sel(a[1], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
-        _sel(a[2], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
-        _sel(a[3], "Average Volume", VOLUME, "avgvol")
-        _sel(a[4], "Relative Volume", RELVOL, "relvol")
-        _sel(a[5], "Price", PRICE, "price")
+        _sel(a[0], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
+        _sel(a[1], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
+        _sel(a[2], "Average Volume", VOLUME, "avgvol")
+        _sel(a[3], "Relative Volume", RELVOL, "relvol")
+        _sel(a[4], "Price", PRICE, "price")
 
         st.markdown('<div class="fsec">Technical &amp; Trend Filters</div>', unsafe_allow_html=True)
         b = st.columns(6)
