@@ -124,5 +124,10 @@ def scan():
     json.dump(sorted(sent)[-5000:], open("sent.json", "w"))
     print("yuborildi:", n)
 
-refresh_fund()
-update() if MODE == "update" else scan()
+# update mode: prices first (most important), then the slow fund refresh.
+# scan mode: news only, so it never touches data.db and never triggers an app redeploy.
+if MODE == "update":
+    update()
+    refresh_fund()
+else:
+    scan()
