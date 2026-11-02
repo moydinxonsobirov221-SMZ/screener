@@ -373,6 +373,10 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
   background:rgba(13,13,16,.75) !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:12px;
   padding:8px 16px !important;box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07);
   display:flex;flex-direction:column;justify-content:center}
+/* nested columns (search box + Go) stay plain: no extra card inside the card */
+.st-key-topbar [data-testid="stColumn"] [data-testid="stColumn"],.st-key-topbar [data-testid="column"] [data-testid="column"]{
+  background:transparent !important;border:0 !important;box-shadow:none !important;padding:0 !important;border-radius:0}
+.st-key-topbar [data-testid="stColumn"]{padding:6px 14px !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
