@@ -377,6 +377,17 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
 .st-key-topbar [data-testid="stColumn"] [data-testid="stColumn"],.st-key-topbar [data-testid="column"] [data-testid="column"]{
   background:transparent !important;border:0 !important;box-shadow:none !important;padding:0 !important;border-radius:0}
 .st-key-topbar [data-testid="stColumn"]{padding:6px 14px !important}
+
+/* ---- chart window: full screen, page behind it cannot scroll ---- */
+div[data-testid="stDialog"]{padding:0 !important}
+div[data-testid="stDialog"] div[role="dialog"]{position:fixed !important;top:0 !important;left:0 !important;
+  width:100vw !important;max-width:100vw !important;height:100vh !important;max-height:100vh !important;
+  margin:0 !important;transform:none !important;border-radius:0 !important;border:0 !important;
+  box-shadow:none !important;background:#000 !important;overflow-y:auto !important;overflow-x:hidden !important;
+  padding:.3rem .8rem .2rem .8rem !important}
+html:has([data-testid="stDialog"]),body:has([data-testid="stDialog"]),
+.stApp:has([data-testid="stDialog"]) [data-testid="stAppViewContainer"],
+.stApp:has([data-testid="stDialog"]) [data-testid="stMain"]{overflow:hidden !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -2259,7 +2270,7 @@ def open_chart(sym: str, row: Optional[pd.Series]) -> None:
             if pd.notna(row.get("sector")):
                 parts.append(html.escape(str(row["sector"])))
             st.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
-        chart_widget(full_sym, 700, 170)
+        chart_widget(full_sym, 700, 165)
 
     _dialog()
 
@@ -2413,7 +2424,7 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
                 left.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>',
                               unsafe_allow_html=True)
             stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        chart_widget(full_sym, 700, 170)
+        chart_widget(full_sym, 700, 165)
 
     _dialog()
 
