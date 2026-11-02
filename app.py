@@ -420,6 +420,11 @@ svg{display:block;margin:0 auto;background:transparent;cursor:grab;touch-action:
   transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden}
 .ctr{transform:rotate(calc(var(--rot,0deg) * -1))}
 .leaf{cursor:pointer}
+#stage{position:relative;margin:0 auto}
+#svg,#svg2{position:absolute;left:0;top:0;margin:0}
+#svg{transform-origin:50% 50%}
+#svg2{pointer-events:none;cursor:default}
+#svg.moving .leaf{pointer-events:none}
 text.t{fill:#f4f6f8;font-weight:700;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.5);stroke-width:2px;stroke-linejoin:round}
 text.p{fill:#eef1f4;font-weight:600;pointer-events:none;paint-order:stroke;stroke:rgba(0,0,0,.45);stroke-width:1.6px;stroke-linejoin:round}
 text.ring{fill:#fff;font-weight:700;pointer-events:none}
@@ -455,7 +460,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side .pc{width:84px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
 .side .row.g .pc{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
 .side .row.r .pc{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
-</style></head><body><svg id="svg"></svg><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
+</style></head><body><div id="stage"><svg id="svg"></svg><svg id="svg2"></svg></div><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
 <button id="snd" title="Dial sound on/off">&#9835; ON</button>
 <script>
 (function () {
@@ -710,9 +715,10 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   function build(a, W, H) {
     var nodes = a.nodes || [], pizza = a.mode === "pizza", scale = +a.scale || 15, step = scale / 3;
-    var svg = d3.select("#svg");
+    var svg = d3.select("#svg"), svg2 = d3.select("#svg2");
     svg.on(".drag", null);
     svg.selectAll("*").remove();
+    svg2.selectAll("*").remove();
     stopInertia();
     document.getElementById("tip").style.display = "none";
     document.getElementById("gl").style.display = "none"; document.getElementById("ll").style.display = "none";
@@ -725,6 +731,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var tb = 20, nb = clamp(18, 22, half * 0.07), Rw = tb + nb, R3 = half - 10, R = R3 - Rw, R2 = R + nb;
     var hubR = clamp(18, 30, R * 0.11);
     svg.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
+    svg2.attr("width", W).attr("height", H).attr("viewBox", [-W / 2, -H / 2, W, H].join(" "));
+    d3.select("#stage").style("width", W + "px").style("height", H + "px");
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
 
@@ -854,7 +862,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     } else {
       /* labels live OUTSIDE the turning group: the heavy map only gets a GPU transform,
          only these few upright texts are re-positioned each frame */
-      var lblSel = svg.append("g").attr("pointer-events", "none").selectAll("g")
+      var lblSel = svg2.append("g").attr("pointer-events", "none").selectAll("g")
         .data(all.filter(function (d) { return d.r >= 11; })).join("g");
       relabel = function (deg) {
         var th = deg * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);
@@ -961,25 +969,25 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
     /* ---- centre hub (does not turn): only when several sectors are shown ---- */
     if (n > 1) {
-      svg.append("circle").attr("r", hubR).attr("fill", "rgba(5,5,8,.92)").style("filter", "drop-shadow(0 0 10px rgba(255,255,255,.28))").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
+      svg2.append("circle").attr("r", hubR).attr("fill", "rgba(5,5,8,.92)").style("filter", "drop-shadow(0 0 10px rgba(255,255,255,.28))").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
         .attr("stroke-width", 2.6).style("vector-effect", "non-scaling-stroke").attr("pointer-events", "none");
-      svg.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
+      svg2.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "central")
         .attr("font-size", hubR * 0.5).attr("font-weight", 800).attr("fill", "#ffffff").attr("letter-spacing", 0.4)
         .attr("pointer-events", "none").text("S.M.Z");
     }
 
     /* ---- fixed index mark at the top (does not turn), like on a safe dial ---- */
-    svg.append("path").attr("d", "M -6 " + (-R3 - 8) + " L 6 " + (-R3 - 8) + " L 0 " + (-R3 + 7) + " Z")
+    svg2.append("path").attr("d", "M -6 " + (-R3 - 8) + " L 6 " + (-R3 - 8) + " L 0 " + (-R3 + 7) + " Z")
       .attr("fill", "#ffffff").attr("pointer-events", "none");
 
     /* ---- turning the dial ---- */
     /* one style write per frame: the dial turns on the GPU, labels counter-rotate through a CSS variable */
-    var rgNode = rg.node(), pendingFrame = false;
-    rgNode.style.willChange = "transform";
+    var rgNode = rg.node(), svgNode = svg.node(), pendingFrame = false;
+    svgNode.style.willChange = "transform";
     applyRot = function (deg) {
       var v = deg.toFixed(2) + "deg";
       if (pizza) { rgNode.style.setProperty("--rot", v); }
-      rgNode.style.transform = "rotate(" + v + ") translate3d(0,0,0)";
+      svgNode.style.transform = "rotate(" + v + ") translateZ(0)";
       if (relabel) { relabel(deg); }
     };
     function setRot(deg, now) {
@@ -995,7 +1003,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     lastStep = Math.floor(rot / CLICK_DEG);
     applyRot(rot);
 
-    function angAt(ev) { var p = d3.pointer(ev, svg.node()); return Math.atan2(p[1], p[0]); }
+    function angAt(ev) { var p = d3.pointer(ev, svg2.node()); return Math.atan2(p[1], p[0]); }
     var dragA = 0, lastMoveT = 0;
     function startInertia() {
       var last = performance.now();
@@ -1003,14 +1011,14 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         var dt = Math.min(0.05, (now - last) / 1000); last = now;
         setRot(rot + vel * dt, true);
         vel *= Math.exp(-2.4 * dt);
-        if (Math.abs(vel) < 6) { raf = null; return; }
+        if (Math.abs(vel) < 6) { raf = null; svg.classed("moving", false); return; }
         raf = requestAnimationFrame(stepFn);
       })(last);
     }
     svg.call(d3.drag().clickDistance(4)
       .on("start", function (ev) {
         ensureAudio(); stopInertia(); dragA = angAt(ev); vel = 0; lastMoveT = performance.now();
-        svg.style("cursor", "grabbing");
+        svg.style("cursor", "grabbing"); svg.classed("moving", true);
       })
       .on("drag", function (ev) {
         var q = angAt(ev), d = q - dragA;
@@ -1025,7 +1033,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       })
       .on("end", function () {
         svg.style("cursor", "grab");
-        if (Math.abs(vel) > 25 && performance.now() - lastMoveT < 90) { startInertia(); }
+        if (Math.abs(vel) > 25 && performance.now() - lastMoveT < 90) { startInertia(); } else { svg.classed("moving", false); }
       }));
 
     /* ---- Top 21 gainers (left) and Top 21 losers (right): ticker, price, sector, change ---- */
@@ -1470,7 +1478,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v30", path=str(d))
+        return components.declare_component("smz_bubbles_v31", path=str(d))
     except Exception:
         return None
 
