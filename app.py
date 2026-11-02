@@ -828,7 +828,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       .attr("stroke-linejoin", "round").style(NS, "non-scaling-stroke");
     rg.append("circle").attr("r", R).attr("fill", "none").attr("stroke", "#ffffff").attr("stroke-opacity", 0.7)
       .attr("stroke-width", 1.8).style(NS, "non-scaling-stroke").attr("pointer-events", "none");
-    var labs = null;
+    var labs = null, relabel = null;
     if (onion) {
       var lblg = rg.append("g").attr("pointer-events", "none");
       all.forEach(function (d, idx) {
@@ -852,9 +852,17 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         }
       });
     } else {
-      labs = rg.append("g").selectAll("g").data(all).join("g").attr("pointer-events", "none")
-        .attr("transform", function (d) { return "translate(" + d.cx.toFixed(1) + "," + d.cy.toFixed(1) + ")"; });
-      var ctr = labs.append("g").attr("class", "ctr");
+      /* labels live OUTSIDE the turning group: the heavy map only gets a GPU transform,
+         only these few upright texts are re-positioned each frame */
+      var lblSel = svg.append("g").attr("pointer-events", "none").selectAll("g")
+        .data(all.filter(function (d) { return d.r >= 11; })).join("g");
+      relabel = function (deg) {
+        var th = deg * Math.PI / 180, cs = Math.cos(th), sn = Math.sin(th);
+        lblSel.attr("transform", function (d) {
+          return "translate(" + (d.cx * cs - d.cy * sn).toFixed(1) + "," + (d.cx * sn + d.cy * cs).toFixed(1) + ")";
+        });
+      };
+      var ctr = lblSel.append("g");
       var tickers = ctr.append("text").attr("class", "t").attr("text-anchor", "middle")
         .text(function (d) { return d.d.ticker; });
       var pcts = ctr.append("text").attr("class", "p").attr("text-anchor", "middle")
@@ -970,8 +978,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     rgNode.style.willChange = "transform";
     applyRot = function (deg) {
       var v = deg.toFixed(2) + "deg";
-      rgNode.style.setProperty("--rot", v);
+      if (pizza) { rgNode.style.setProperty("--rot", v); }
       rgNode.style.transform = "rotate(" + v + ") translate3d(0,0,0)";
+      if (relabel) { relabel(deg); }
     };
     function setRot(deg, now) {
       rot = deg;
@@ -1461,7 +1470,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v29", path=str(d))
+        return components.declare_component("smz_bubbles_v30", path=str(d))
     except Exception:
         return None
 
