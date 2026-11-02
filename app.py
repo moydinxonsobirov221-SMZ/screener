@@ -355,6 +355,16 @@ button[data-testid="stBaseButton-secondary"]:hover{border-color:rgba(16,185,129,
 .st-key-nav button[kind="segmented_controlActive"],.st-key-nav button[data-testid="stBaseButton-segmented_controlActive"]{
   opacity:1;border-bottom:2px solid #10B981 !important;font-weight:500;
   box-shadow:0 9px 14px -10px rgba(16,185,129,.75) !important}
+
+/* ---- scroll performance: no live blur, GPU-friendly tape ---- */
+.tape,.slist,.st-key-secbox,.st-key-wheelpanel,.kpi,.st-key-filtergrid,.st-key-tablepanel,
+div[data-testid="stDialog"] div[role="dialog"],div[data-baseweb="select"] > div,.stTextInput input,
+.stNumberInput input,div[data-baseweb="popover"] > div,div[data-baseweb="menu"],ul[role="listbox"],
+.stButton button,.stDownloadButton button,[data-testid="stDownloadButton"] button,
+button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}
+.tape{contain:layout paint}
+.tape-in{will-change:transform;backface-visibility:hidden}
+.st-key-wheelpanel{contain:layout paint}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -441,7 +451,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 #snd:hover{filter:brightness(1.15)}
 .side{position:fixed;display:none;z-index:5;font-size:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,.08);border-radius:14px;
   padding:12px 10px 8px 10px;background:rgba(13,13,16,.75);
-  -webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
+  box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07)}
 .side .hd{font-weight:700;font-size:14px;letter-spacing:.3px;padding:0 2px 6px 2px;white-space:nowrap}
 .side .hd{display:inline-block}
 .side .hd.g{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
@@ -1480,7 +1490,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v32", path=str(d))
+        return components.declare_component("smz_bubbles_v33", path=str(d))
     except Exception:
         return None
 
