@@ -701,7 +701,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
-    var key = JSON.stringify([a.nodes, a.scale, a.perf_label, a.gainers, a.losers, a.mode]) + "|" + W + "|" + H;
+    var key = JSON.stringify([a.nodes, a.sectors, a.scale, a.perf_label, a.gainers, a.losers, a.mode]) + "|" + W + "|" + H;
     if (!force && key === lastKey) { return; }
     lastKey = key;
     setHeight(H);
@@ -709,14 +709,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   }
 
   function build(a, W, H) {
-    var nodes = a.nodes || [], scale = +a.scale || 15, step = scale / 3;
+    var nodes = a.nodes || [], pizza = a.mode === "pizza", scale = +a.scale || 15, step = scale / 3;
     var svg = d3.select("#svg");
     svg.on(".drag", null);
     svg.selectAll("*").remove();
     stopInertia();
     document.getElementById("tip").style.display = "none";
     document.getElementById("gl").style.display = "none"; document.getElementById("ll").style.display = "none";
-    if (!nodes.length) { showMsg("No stocks with market cap data for this selection."); return; }
+    if (!nodes.length && !pizza) { showMsg("No stocks with market cap data for this selection."); return; }
+    if (pizza && !(a.sectors || []).length) { showMsg("No sectors with market cap data for this selection."); return; }
     showMsg("");
     legend(step, a.perf_label || "Today");
 
@@ -727,11 +728,19 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
     function color(v) { var t = clamp(1, 3, Math.ceil(Math.abs(v) / step - 1e-9)) - 1; return (v >= 0 ? GREEN : RED)[t]; }
 
-    var groups = d3.groups(nodes, function (n) { return n.sector; }).map(function (g) {
-      var items = g[1].map(function (n) { return {d: n, rho: Math.pow(n.mcap, EXP), r: 0}; })
-        .sort(function (p, q) { return q.rho - p.rho; });
-      return {name: g[0], items: items, S: d3.sum(items, function (it) { return it.rho * it.rho; })};
-    }).sort(function (p, q) { return q.S - p.S; });
+    var groups;
+    if (pizza) {
+      /* pizza mode: one slice per sector (a handful of shapes), coloured by the sector's overall move */
+      groups = (a.sectors || []).map(function (s) {
+        return {name: s.name, items: [], S: Math.sqrt(s.mcap), perf: s.perf, mcap: s.mcap, count: s.count};
+      }).sort(function (p, q) { return q.S - p.S; });
+    } else {
+      groups = d3.groups(nodes, function (n) { return n.sector; }).map(function (g) {
+        var items = g[1].map(function (n) { return {d: n, rho: Math.pow(n.mcap, EXP), r: 0}; })
+          .sort(function (p, q) { return q.rho - p.rho; });
+        return {name: g[0], items: items, S: d3.sum(items, function (it) { return it.rho * it.rho; })};
+      }).sort(function (p, q) { return q.S - p.S; });
+    }
     var n = groups.length;
     var angs = allocAngles(groups.map(function (g) { return g.S; }));
     var cur = -Math.PI / 2;
@@ -767,7 +776,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         it.a0 = g.a0; it.a1 = g.full ? g.a0 + 2 * Math.PI - 0.0002 : g.a1;
       });
     });
-    } else {
+    } else if (!pizza) {
       var geoErr = 0;
       groups.forEach(function (g) { geoErr = Math.max(geoErr, voronoiSector(g, R)); });
       window.__geoErr = geoErr;
@@ -858,6 +867,57 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         var rk = d.r, fs = clamp(6, 12, rk * 0.32);
         d3.select(this).style("display", rk >= 22 ? null : "none").attr("font-size", fs).attr("y", fs * 1.05 + clamp(0, 6, rk * 0.08));
       });
+    }
+
+    /* ---- pizza mode: one slice per sector, coloured by the sector's overall performance ---- */
+    if (pizza) {
+      var PT = function (r, an) { return (r * Math.cos(an)).toFixed(2) + "," + (r * Math.sin(an)).toFixed(2); };
+      var tipP = document.getElementById("tip");
+      rg.append("g").selectAll("path").data(groups).join("path").attr("class", "leaf")
+        .attr("d", function (g) {
+          if (g.full) {
+            return "M" + PT(R, g.a0) + "A" + R + "," + R + " 0 1 1 " + PT(R, g.a0 + Math.PI) +
+              "A" + R + "," + R + " 0 1 1 " + PT(R, g.a0) + "Z";
+          }
+          var lg = (g.a1 - g.a0) > Math.PI ? 1 : 0;
+          return "M0,0L" + PT(R, g.a0) + "A" + R + "," + R + " 0 " + lg + " 1 " + PT(R, g.a1) + "Z";
+        })
+        .attr("fill", function (g) { return fillFor(g.perf); })
+        .attr("stroke", "rgba(0,0,0,.6)").attr("stroke-width", 1.4).style(NS, "non-scaling-stroke")
+        .on("mouseover", function (ev, g) {
+          tipP.innerHTML = "<b>" + esc(g.name) + "</b><br>" + g.count + " stocks<br>Market Cap " + fmtCap(g.mcap) +
+            "<br>" + esc(a.perf_label || "Today") + " <span style=\"color:" + color(g.perf) + "\">" + fmtPct(g.perf) +
+            "</span><br><i>click to enter</i>";
+          tipP.style.display = "block";
+          d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2);
+        })
+        .on("mousemove", function (ev) {
+          var x = ev.clientX + 14, y = ev.clientY + 14;
+          if (x + 200 > window.innerWidth) { x = ev.clientX - 210; }
+          if (y + 110 > window.innerHeight) { y = ev.clientY - 110; }
+          tipP.style.left = Math.max(2, x) + "px"; tipP.style.top = Math.max(2, y) + "px";
+        })
+        .on("mouseout", function () {
+          tipP.style.display = "none";
+          d3.select(this).attr("stroke", "rgba(0,0,0,.6)").attr("stroke-width", 1.4);
+        })
+        .on("click", function (ev, g) {
+          ev.stopPropagation(); tipP.style.display = "none";
+          setValue({sector: g.name, n: Date.now() + Math.random()});
+        });
+      var pl = rg.append("g").attr("pointer-events", "none").selectAll("g").data(groups).join("g")
+        .attr("transform", function (g) {
+          var rr = R * (n > 1 ? 0.6 : 0);
+          return "translate(" + (rr * Math.cos(g.am)).toFixed(1) + "," + (rr * Math.sin(g.am)).toFixed(1) + ")";
+        });
+      var pc = pl.append("g").attr("class", "ctr");
+      pc.append("text").attr("class", "t").attr("text-anchor", "middle")
+        .attr("font-size", function (g) { return clamp(9, 20, Math.sqrt(g.a1 - g.a0) * R * 0.07); })
+        .attr("y", -2).text(function (g) { return g.name; });
+      pc.append("text").attr("class", "p").attr("text-anchor", "middle")
+        .attr("font-size", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055); })
+        .attr("y", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055) + 4; })
+        .text(function (g) { return fmtPct(g.perf); });
     }
 
     /* ---- thin sector lines: from the centre to the end of the name ring only ---- */
@@ -1401,7 +1461,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v28", path=str(d))
+        return components.declare_component("smz_bubbles_v29", path=str(d))
     except Exception:
         return None
 
@@ -1783,8 +1843,8 @@ def _pick_sector(name: str) -> None:
 
 
 def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
-    """Radial map. All sectors: wedge map. One sector picked in the white sector box: every company
-    becomes a full ring (onion), biggest market cap outside, smallest in the centre."""
+    """Radial map. All sectors: pizza map (one slice per sector, coloured by the sector's overall move).
+    One sector picked (click a slice or use the box below): every company of that sector fills the full circle."""
     if not meta["has_fund"]:
         st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
         return []
@@ -1806,7 +1866,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     nodes = payload["nodes"] if chosen == "All" else [n for n in payload["nodes"] if n["sector"] == chosen]
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
     if chosen == "All":
-        hint = "pick a sector in the box below to enter it"
+        hint = "click a sector slice (or use the box below) to enter it"
     else:
         hint = f"inside {chosen}"
     cap_col.caption(f"{len(nodes)} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
@@ -1828,8 +1888,25 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     gainers = _rank(valid.nlargest(21, perf_col))
     losers = _rank(valid.nsmallest(21, perf_col))
     with keyed("wheelpanel"):
-        ev = comp(nodes=nodes, scale=scale, perf_label=label, gainers=gainers, losers=losers,
-                  mode="all", key="smz_bubbles", default=None)
+        if chosen == "All":
+            # pizza mode: only sector slices; colour = market-cap weighted average move of the sector
+            sec_rows = []
+            for name, g in pd.DataFrame(payload["nodes"]).groupby("sector"):
+                w = g["mcap"]
+                sec_rows.append(dict(name=str(name), mcap=float(w.sum()),
+                                     perf=float((g["perf"] * w).sum() / w.sum()), count=int(len(g))))
+            ev = comp(nodes=[], sectors=sec_rows, scale=3.0, perf_label=label, gainers=gainers,
+                      losers=losers, mode="pizza", key="smz_bubbles", default=None)
+        else:
+            ev = comp(nodes=nodes, sectors=[], scale=15.0, perf_label=label, gainers=gainers,
+                      losers=losers, mode="all", key="smz_bubbles", default=None)
+
+    # a pizza slice was clicked: enter that sector
+    if isinstance(ev, dict) and ev.get("sector") and ev.get("n") != S.get("last_sec_evt"):
+        S["last_sec_evt"] = ev.get("n")
+        if ev["sector"] in secs:
+            S["bub_sector"] = ev["sector"]
+            st.rerun()
 
     box = keyed("secbox")
     with box:
