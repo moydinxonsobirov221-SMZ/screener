@@ -1004,7 +1004,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     applyRot(rot);
 
     function angAt(ev) { var p = d3.pointer(ev, svg2.node()); return Math.atan2(p[1], p[0]); }
-    var dragA = 0, lastMoveT = 0;
+    var dragA = 0, lastMoveT = 0, dragTot = 0;
     function startInertia() {
       var last = performance.now();
       (function stepFn(now) {
@@ -1018,7 +1018,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     svg.call(d3.drag().clickDistance(4)
       .on("start", function (ev) {
         ensureAudio(); stopInertia(); dragA = angAt(ev); vel = 0; lastMoveT = performance.now();
-        svg.style("cursor", "grabbing"); svg.classed("moving", true);
+        svg.style("cursor", "grabbing"); dragTot = 0;
       })
       .on("drag", function (ev) {
         var q = angAt(ev), d = q - dragA;
@@ -1027,6 +1027,8 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         dragA = q;
         var now = performance.now(), dt = Math.max(1, now - lastMoveT) / 1000; lastMoveT = now;
         var dd = d * 180 / Math.PI;
+        dragTot += Math.abs(dd);
+        if (dragTot > 2) { svg.classed("moving", true); }
         setRot(rot + dd);
         vel = 0.6 * vel + 0.4 * (dd / dt);
         document.getElementById("tip").style.display = "none";
@@ -1478,7 +1480,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v31", path=str(d))
+        return components.declare_component("smz_bubbles_v32", path=str(d))
     except Exception:
         return None
 
