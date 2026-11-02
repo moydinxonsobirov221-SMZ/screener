@@ -365,6 +365,14 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
 .tape{contain:layout paint}
 .tape-in{will-change:transform;backface-visibility:hidden}
 .st-key-wheelpanel{contain:layout paint}
+
+/* ---- top bar: four separate cards, same look as the KPI tiles ---- */
+.st-key-topbar{border-bottom:0 !important;padding:0 !important;margin:0 0 10px 0 !important}
+.st-key-topbar div[data-testid="stHorizontalBlock"]{gap:.7rem !important;align-items:stretch !important}
+.st-key-topbar [data-testid="stColumn"],.st-key-topbar [data-testid="column"]{
+  background:rgba(13,13,16,.75) !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:12px;
+  padding:8px 16px !important;box-shadow:0 10px 36px rgba(0,0,0,.5),inset 1px 1px 0 rgba(255,255,255,.07);
+  display:flex;flex-direction:column;justify-content:center}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -986,9 +994,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         .attr("pointer-events", "none").text("S.M.Z");
     }
 
-    /* ---- fixed index mark at the top (does not turn), like on a safe dial ---- */
-    svg2.append("path").attr("d", "M -6 " + (-R3 - 8) + " L 6 " + (-R3 - 8) + " L 0 " + (-R3 + 7) + " Z")
-      .attr("fill", "#ffffff").attr("pointer-events", "none");
+
 
     /* ---- turning the dial ---- */
     /* one style write per frame: the dial turns on the GPU, labels counter-rotate through a CSS variable */
@@ -1490,7 +1496,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v33", path=str(d))
+        return components.declare_component("smz_bubbles_v34", path=str(d))
     except Exception:
         return None
 
@@ -2332,10 +2338,7 @@ def main() -> None:
 
     to_open, S["opened"] = decide_open(items, S.get("opened"), forced)
     foot = f"© {BRAND} | For informational purposes only."
-    if view == "Home":
-        st.markdown(f'<div class="smz-foot">{foot}</div>', unsafe_allow_html=True)
-    else:
-        st.caption(foot)
+    st.caption(foot)
     inject_seo()
     if to_open:
         r = day[day["ticker"] == to_open]
