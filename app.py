@@ -405,6 +405,9 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
   overflow-x:hidden !important;overflow-y:auto !important;gap:.35rem !important}
 .st-key-chartfs .chartbar{font-size:1rem;padding-top:6px}
 .stApp:has(.st-key-chartfs) [data-testid="stMain"],.stApp:has(.st-key-chartfs) [data-testid="stAppViewContainer"]{overflow:hidden !important}
+/* keep the bottom-right corner free (Streamlit Cloud "Manage app" button lives there) */
+.block-container{padding-bottom:4.5rem !important}
+.st-key-chartfs{padding-bottom:46px !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -2422,9 +2425,9 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
     full_sym = chart_symbol(sym, exch)
     with keyed("chartfs"):
         try:
-            top = st.columns([7, 1.3, 1.0], vertical_alignment="center")
+            top = st.columns([6, 1.6, 1.3, 1.0], vertical_alignment="center")
         except TypeError:
-            top = st.columns([7, 1.3, 1.0])
+            top = st.columns([6, 1.6, 1.3, 1.0])
         parts = [f"<b>{html.escape(sym)}</b>"]
         if row is not None:
             parts += [f"${row['close']:.2f}", f"{row['chg']:+.2f}%"]
@@ -2439,16 +2442,22 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
             if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
                 parts.append(f"Spike20 {int(row['spike20'])}")
         top[0].markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
+        tv_url = "https://www.tradingview.com/chart/?symbol=" + urllib.parse.quote(full_sym, safe="")
+        try:
+            stretch(top[1].link_button, "↗ TradingView", tv_url)
+        except Exception:  # noqa: BLE001 - old Streamlit without link_button
+            top[1].markdown(f'<a href="{html.escape(tv_url, quote=True)}" target="_blank" rel="noopener" '
+                            'style="color:#10B981;font-weight:600">↗ TradingView</a>', unsafe_allow_html=True)
         if AI_OK:
             if S.get("ai_view"):
-                stretch(top[1].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+                stretch(top[2].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
             else:
-                stretch(top[1].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        stretch(top[2].button, "✕ Close", key="chart_close", on_click=_chart_close)
+                stretch(top[2].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+        stretch(top[3].button, "✕ Close", key="chart_close", on_click=_chart_close)
         if AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
         else:
-            chart_widget(full_sym, 700, 95)
+            chart_widget(full_sym, 700, 105)
 
 
 if __name__ == "__main__":
