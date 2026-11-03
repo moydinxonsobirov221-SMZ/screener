@@ -72,7 +72,14 @@ PRICE = {"Any": None, **{f"Under ${v}": (0, v) for v in (1, 2, 3, 4, 5, 7, 10, 1
          "$1 to $5": (1, 5), "$1 to $10": (1, 10), "$5 to $10": (5, 10)}
 VOLUME = _over_under((5e4, 1e5, 5e5, 7.5e5, 1e6), (5e4, 1e5, 2e5, 3e5, 4e5, 5e5, 7.5e5, 1e6, 2e6, 5e6, 1e7), _short)
 RELVOL = _over_under((0.5, 0.75, 1), (0.5, 1, 1.5, 2, 3, 5, 10), lambda v: f"{v:g}")
+# ATR in price units ($). Kept for compatibility; the percent version below is the one used by S.M.Z signals.
 ATR_OPT = _over_under((0.1, 0.25, 0.5, 1, 1.5, 2), (0.1, 0.25, 0.5, 1, 1.5, 2), lambda v: f"{v:g}")
+# ATR as a percent of the price (ATR / Price * 100): comparable between cheap and expensive stocks
+ATRP_OPT = {"Any": None, "Under 5%": (0, 5), "Over 5%": (5, INF), "Over 8%": (8, INF), "Over 10%": (10, INF),
+            "Over 13%": (13, INF), "Over 15%": (15, INF), "Over 20%": (20, INF)}
+# number of days with a 30%+ jump among the last 20 trading days (including the selected day)
+SPIKE_OPT = {"Any": None, "No spike (0)": (0, 0), "1 or more": (1, INF), "2 or more": (2, INF),
+             "3 or more": (3, INF)}
 RSI_OPT = {"Any": None, "Overbought (90)": (90, 100), "Overbought (80)": (80, 100), "Overbought (70)": (70, 100),
            "Overbought (60)": (60, 100), "Oversold (40)": (0, 40), "Oversold (30)": (0, 30),
            "Oversold (20)": (0, 20), "Oversold (10)": (0, 10), "Not Overbought (<60)": (0, 60),
@@ -81,7 +88,7 @@ RSI_OPT = {"Any": None, "Overbought (90)": (90, 100), "Overbought (80)": (80, 10
 
 def _sma_opts(n: int) -> dict:
     d = {"Any": None, f"Price below SMA{n}": (-INF, 0)}
-    d.update({f"Price {p}% below SMA{n}": (-INF, -p) for p in (10, 20, 30, 40, 50)})
+    d.update({f"Price {p}% below SMA{n}": (-INF, -p) for p in (10, 20, 30, 40, 50, 60, 70)})
     d[f"Price above SMA{n}"] = (0, INF)
     d.update({f"Price {p}% above SMA{n}": (p, INF) for p in (10, 20, 30, 40, 50)})
     return d
@@ -90,9 +97,10 @@ def _sma_opts(n: int) -> dict:
 SMA_OPTS = {20: _sma_opts(20), 50: _sma_opts(50), 200: _sma_opts(200)}
 HL52 = ["Any", "New High", "New Low", "0-3% below High", "0-5% below High", "0-10% below High",
         "5% or more below High", "10% or more below High", "20% or more below High", "30% or more below High",
-        "50% or more below High", "0-3% above Low", "0-5% above Low", "0-10% above Low",
-        "5% or more above Low", "10% or more above Low", "20% or more above Low", "30% or more above Low",
-        "50% or more above Low", "100% or more above Low"]
+        "50% or more below High", "70% or more below High", "75% or more below High",
+        "80% or more below High", "90% or more below High", "0-3% above Low", "0-5% above Low",
+        "0-10% above Low", "5% or more above Low", "10% or more above Low", "20% or more above Low",
+        "30% or more above Low", "50% or more above Low", "100% or more above Low"]
 MCAP = {"Any": None, "Mega ($200bln and more)": (200000, INF), "Large ($10bln to $200bln)": (10000, 200000),
         "Mid ($2bln to $10bln)": (2000, 10000), "Small ($300mln to $2bln)": (300, 2000),
         "Micro ($50mln to $300mln)": (50, 300), "Nano (under $50mln)": (0, 50),
@@ -114,8 +122,8 @@ EXCH_CODES = {"NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NAS": "NASDAQ"
               "ASE": "AMEX", "PCX": "AMEX", "BTS": "BATS", "BATS": "BATS"}
 
 # default value of every filter widget (the key is also the session_state key)
-D = dict(exch="Any", price="Any", avgvol="Any", relvol="Any", chg="Any", gap="Any", atr="Any", rsi="Any",
-         s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any")
+D = dict(exch="Any", price="Any", avgvol="Any", relvol="Any", chg="Any", gap="Any", atr="Any", atrp="Any",
+         spike="Any", rsi="Any", s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any")
 
 SIGNALS = {
     "None": {},
@@ -123,18 +131,31 @@ SIGNALS = {
     "Top Losers": dict(chg="Down", sort_by="Change", sort_asc=True),
     "New High": dict(hl52="New High", sort_by="Change", sort_asc=False),
     "New Low": dict(hl52="New Low", sort_by="Change", sort_asc=True),
-    "Most Volatile": dict(sort_by="ATR", sort_asc=False),
+    "Most Volatile": dict(sort_by="ATR %", sort_asc=False),
     "Most Active": dict(sort_by="Volume", sort_asc=False),
     "Unusual Volume": dict(relvol="Over 3", sort_by="Rel Volume", sort_asc=False),
     "Overbought": dict(rsi="Overbought (70)", sort_by="RSI", sort_asc=False),
     "Oversold": dict(rsi="Oversold (30)", sort_by="RSI", sort_asc=True),
     "Gap Up": dict(gap="Up 5%", relvol="Over 2", sort_by="Gap", sort_asc=False),
     "Low Price Runner": dict(price="Under $10", relvol="Over 2", chg="Up 3%", sort_by="Change", sort_asc=False),
+    # ---- S.M.Z historical-research signals (stocks likely to spike 30%+ the NEXT day) ----
+    # Run after the market close. Backtest (unseen period): about 5-7% hit rate vs 0.37% baseline.
+    # Most signals still do NOT spike: this is a candidate list, not a trade signal.
+    "SMZ: Spike in last 20d + volume": dict(price="Under $10", avgvol="Over 100K", relvol="Over 2",
+                                            spike="1 or more", sort_by="Rel Volume", sort_asc=False),
+    "SMZ: Yesterday spiked + volume": dict(price="Under $10", avgvol="Over 100K", chg="Up 20%", relvol="Over 3",
+                                           sort_by="Change", sort_asc=False),
+    "SMZ: Beaten down + volume": dict(price="Under $10", avgvol="Over 100K", relvol="Over 2", atrp="Over 10%",
+                                      s200="Price 40% below SMA200", hl52="75% or more below High",
+                                      sort_by="Rel Volume", sort_asc=False),
+    "SMZ: Sharp drop + volume": dict(price="Under $10", avgvol="Over 100K", chg="Down 20%", relvol="Over 1.5",
+                                     sort_by="Change", sort_asc=True),
 }
 
 COLS = {"ticker": "Ticker", "sector": "Sector", "industry": "Industry", "mcap": "Market Cap",
         "float_sh": "Float", "short_pct": "Short Float", "close": "Price", "chg": "Change", "gap": "Gap",
         "volume": "Volume", "avgvol": "Avg Volume", "relvol": "Rel Volume", "dvol": "$ Volume", "atr": "ATR",
+        "atrp": "ATR %", "spike20": "Spike20",
         "rsi": "RSI", "d20": "SMA20", "d50": "SMA50", "d200": "SMA200", "hid": "52W High", "lod": "52W Low",
         "pw": "Perf Week", "pm": "Perf Month", "pq": "Perf Quarter"}
 FUND_COLS = ("mcap", "float_sh", "short_pct")
@@ -152,7 +173,8 @@ def _fmt_m(v) -> str:
 
 
 FMT = {"No.": "{:d}", "Price": "{:.2f}", "Change": "{:+.2f}%", "Gap": "{:+.2f}%", "Volume": "{:,.0f}",
-       "Avg Volume": "{:,.0f}", "Rel Volume": "{:.2f}", "$ Volume": "{:,.2f}M", "ATR": "{:.2f}", "RSI": "{:.2f}",
+       "Avg Volume": "{:,.0f}", "Rel Volume": "{:.2f}", "$ Volume": "{:,.2f}M", "ATR": "{:.2f}",
+       "ATR %": "{:.2f}%", "Spike20": "{:.0f}", "RSI": "{:.2f}",
        "SMA20": "{:+.2f}%", "SMA50": "{:+.2f}%", "SMA200": "{:+.2f}%", "52W High": "{:+.2f}%",
        "52W Low": "{:+.2f}%", "Perf Week": "{:+.2f}%", "Perf Month": "{:+.2f}%", "Perf Quarter": "{:+.2f}%",
        "Market Cap": _fmt_cap, "Float": _fmt_m, "Short Float": "{:.2f}%"}
@@ -355,7 +377,6 @@ button[data-testid="stBaseButton-secondary"]:hover{border-color:rgba(16,185,129,
 .st-key-nav button[kind="segmented_controlActive"],.st-key-nav button[data-testid="stBaseButton-segmented_controlActive"]{
   opacity:1;border-bottom:2px solid #10B981 !important;font-weight:500;
   box-shadow:0 9px 14px -10px rgba(16,185,129,.75) !important}
-
 /* ---- scroll performance: no live blur, GPU-friendly tape ---- */
 .tape,.slist,.st-key-secbox,.st-key-wheelpanel,.kpi,.st-key-filtergrid,.st-key-tablepanel,
 div[data-testid="stDialog"] div[role="dialog"],div[data-baseweb="select"] > div,.stTextInput input,
@@ -1217,6 +1238,10 @@ def load_data(stamp: float = 0.0) -> tuple[pd.DataFrame, dict]:
     ewm = lambda s: s.ewm(alpha=1 / 14, adjust=False, min_periods=14).mean()  # noqa: E731
     p["atr"] = tr.groupby(p["ticker"]).transform(ewm)
     p["atrp"] = p["atr"] / p["close"] * 100
+    # Spike20: how many days in the last 20 trading days (including this day) closed up 30%+.
+    # Changes above 400% are ignored: they are almost always reverse splits / data errors.
+    jump = ((p["chg"] >= 30) & (p["chg"] < 400)).astype(float)
+    p["spike20"] = jump.groupby(p["ticker"]).transform(lambda s: s.rolling(20, min_periods=1).sum())
     delta = g["close"].diff()
     up = delta.clip(lower=0).groupby(p["ticker"]).transform(ewm)
     dn = (-delta).clip(lower=0).groupby(p["ticker"]).transform(ewm)
@@ -1295,6 +1320,8 @@ def apply_filters(day: pd.DataFrame, s, meta: dict) -> pd.DataFrame:
     x = _opt(x, "chg", CHANGE, s["chg"])
     x = _opt(x, "gap", GAP, s["gap"])
     x = _opt(x, "atr", ATR_OPT, s["atr"])
+    x = _opt(x, "atrp", ATRP_OPT, s.get("atrp", "Any"))
+    x = _opt(x, "spike20", SPIKE_OPT, s.get("spike", "Any"))
     x = _opt(x, "rsi", RSI_OPT, s["rsi"])
     for n in (20, 50, 200):
         x = _opt(x, f"d{n}", SMA_OPTS[n], s[f"s{n}"])
@@ -2035,13 +2062,15 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
         b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
         _sel(b[1], "Change", CHANGE, "chg")
         _sel(b[2], "Gap %", GAP, "gap")
-        _sel(b[3], "ATR", ATR_OPT, "atr")
+        _sel(b[3], "ATR ($)", ATR_OPT, "atr")
         _sel(b[4], "RSI (14)", RSI_OPT, "rsi")
         _sel(b[5], "52-Week High/Low", HL52, "hl52")
         t = st.columns(6)
         _sel(t[0], "SMA20", SMA_OPTS[20], "s20")
         _sel(t[1], "SMA50", SMA_OPTS[50], "s50")
         _sel(t[2], "SMA200", SMA_OPTS[200], "s200")
+        _sel(t[3], "ATR % (of price)", ATRP_OPT, "atrp")
+        _sel(t[4], "Spike (30%+ in 20 days)", SPIKE_OPT, "spike")
 
 
 # ---- institutional data table (custom component: row hover, zebra rows, glowing numbers) ----
@@ -2222,8 +2251,8 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
     x = apply_filters(day, S, meta)
 
     order = ["ticker", "sector"] + (["mcap"] if meta["has_fund"] else []) + \
-            ["close", "chg", "gap", "volume", "avgvol", "relvol", "atr", "rsi", "d20", "d50", "d200",
-             "hid", "lod", "pw", "pm", "pq"]
+            ["close", "chg", "gap", "volume", "avgvol", "relvol", "atr", "atrp", "spike20", "rsi", "d20", "d50",
+             "d200", "hid", "lod", "pw", "pm", "pq"]
     names = [COLS[c] for c in order]
     if S.get("sort_by") not in names:
         S["sort_by"] = "Change"
@@ -2250,29 +2279,8 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
 
 
 # =============================================================================
-# 7. CHART DIALOG
+# 7. CHART DIALOG  (open_chart is defined below, together with the S.M.Z AI panel)
 # =============================================================================
-def open_chart(sym: str, row: Optional[pd.Series]) -> None:
-    """Open a full-width modal window with the advanced chart."""
-    exch = row["exchange"] if row is not None and "exchange" in row else None
-    full_sym = chart_symbol(sym, exch)
-
-    @st.dialog(sym, width="large")
-    def _dialog():
-        if row is not None:
-            parts = [f"<b>${row['close']:.2f}</b>", f"{row['chg']:+.2f}%"]
-            if pd.notna(row["relvol"]):
-                parts.append(f"Rel Volume {row['relvol']:.1f}")
-            if pd.notna(row["rsi"]):
-                parts.append(f"RSI {row['rsi']:.0f}")
-            if pd.notna(row["atr"]):
-                parts.append(f"ATR {row['atr']:.2f}")
-            if pd.notna(row.get("sector")):
-                parts.append(html.escape(str(row["sector"])))
-            st.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
-        chart_widget(full_sym, 700, 165)
-
-    _dialog()
 
 
 # =============================================================================
@@ -2365,7 +2373,11 @@ def main() -> None:
 # =============================================================================
 import datetime as dt
 
-from smz_ai import build_facts, run_analysis
+try:
+    from smz_ai import build_facts, run_analysis  # smz_ai.py must be next to this file
+    AI_OK = True
+except Exception:  # noqa: BLE001  - the app still works without the AI module
+    AI_OK = False
 
 
 def _ai_open() -> None:
@@ -2408,7 +2420,7 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
 
     @st.dialog(sym, width="large")
     def _dialog():
-        if S.get("ai_view"):
+        if AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
             return
         with st.container(border=True):
@@ -2421,9 +2433,14 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
                     parts.append(f"RSI {row['rsi']:.0f}")
                 if pd.notna(row["atr"]):
                     parts.append(f"ATR {row['atr']:.2f}")
+                if "atrp" in row.index and pd.notna(row["atrp"]):
+                    parts.append(f"ATR% {row['atrp']:.1f}")
+                if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
+                    parts.append(f"Spike20 {int(row['spike20'])}")
                 left.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>',
                               unsafe_allow_html=True)
-            stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+            if AI_OK:
+                stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
         chart_widget(full_sym, 700, 165)
 
     _dialog()
