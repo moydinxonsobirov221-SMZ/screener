@@ -399,16 +399,12 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
   background:transparent !important;border:0 !important;box-shadow:none !important;padding:0 !important;border-radius:0}
 .st-key-topbar [data-testid="stColumn"]{padding:6px 14px !important}
 
-/* ---- chart window: full screen, page behind it cannot scroll ---- */
-div[data-testid="stDialog"]{padding:0 !important}
-div[data-testid="stDialog"] div[role="dialog"]{position:fixed !important;top:0 !important;left:0 !important;
-  width:100vw !important;max-width:100vw !important;height:100vh !important;max-height:100vh !important;
-  margin:0 !important;transform:none !important;border-radius:0 !important;border:0 !important;
-  box-shadow:none !important;background:#000 !important;overflow-y:auto !important;overflow-x:hidden !important;
-  padding:.3rem .8rem .2rem .8rem !important}
-html:has([data-testid="stDialog"]),body:has([data-testid="stDialog"]),
-.stApp:has([data-testid="stDialog"]) [data-testid="stAppViewContainer"],
-.stApp:has([data-testid="stDialog"]) [data-testid="stMain"]{overflow:hidden !important}
+/* ---- chart: full-screen layer, the page behind it cannot scroll ---- */
+.st-key-chartfs{position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;
+  z-index:999990 !important;background:#000 !important;box-sizing:border-box;padding:10px 16px 0 16px !important;
+  overflow-x:hidden !important;overflow-y:auto !important;gap:.35rem !important}
+.st-key-chartfs .chartbar{font-size:1rem;padding-top:6px}
+.stApp:has(.st-key-chartfs) [data-testid="stMain"],.stApp:has(.st-key-chartfs) [data-testid="stAppViewContainer"]{overflow:hidden !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -1332,11 +1328,11 @@ def apply_filters(day: pd.DataFrame, s, meta: dict) -> pd.DataFrame:
 
 
 def decide_open(items: list, opened: Optional[str], forced: Optional[str]) -> tuple[Optional[str], Optional[str]]:
-    """Decide which chart dialog (if any) to open on this rerun.
+    """Decide which chart (if any) to open on this rerun.
 
     items: [(selection_token, ticker)] for the table cells currently highlighted;
-    opened: token whose dialog was already shown; forced: ticker typed in the search box.
-    Returns (ticker_to_open, new_opened). The token guard stops a dialog from re-opening on
+    opened: token whose chart was already shown; forced: ticker typed in the search box.
+    Returns (ticker_to_open, new_opened). The token guard stops a chart from re-opening on
     unrelated reruns, while clicking a different cell (even of the same stock) opens it again.
     """
     if forced:
@@ -2279,7 +2275,7 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
 
 
 # =============================================================================
-# 7. CHART DIALOG  (open_chart is defined below, together with the S.M.Z AI panel)
+# 7. CHART  (open_chart is defined below, together with the S.M.Z AI panel)
 # =============================================================================
 
 
@@ -2363,13 +2359,18 @@ def main() -> None:
     foot = f"© {BRAND} | For informational purposes only."
     st.caption(foot)
     inject_seo()
+    # the chart stays open (in session state) until the user presses Close
     if to_open:
-        r = day[day["ticker"] == to_open]
-        open_chart(to_open, r.iloc[0] if not r.empty else None)
+        S["chart_sym"] = to_open
+        S["ai_view"] = False
+    sym_open = S.get("chart_sym")
+    if sym_open:
+        r = day[day["ticker"] == sym_open]
+        open_chart(sym_open, r.iloc[0] if not r.empty else None)
 
 
 # =============================================================================
-# S.M.Z AI (Groq) - grafik oynasiga "S.M.Z AI" tugmasi va AI tahlil oynasi
+# S.M.Z AI (Groq) - "S.M.Z AI" tugmasi va AI tahlil oynasi
 # =============================================================================
 import datetime as dt
 
@@ -2388,11 +2389,14 @@ def _ai_close() -> None:
     S["ai_view"] = False
 
 
+def _chart_close() -> None:
+    S["chart_sym"] = None
+    S["ai_view"] = False
+
+
 def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
-    """Grafik o'rnini egallaydigan to'liq AI tahlil oynasi."""
-    top = st.columns([5, 1])
-    top[0].markdown(f"### S.M.Z AI · {sym}")
-    stretch(top[1].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+    """AI analysis shown instead of the chart (the full-screen layer has its own header row)."""
+    st.markdown(f"### S.M.Z AI · {sym}")
 
     cache = S.setdefault("ai_cache", {})
     ckey = (sym, dt.date.today().isoformat())
@@ -2413,37 +2417,38 @@ def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
 
 
 def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
-    """Grafik oynasi: ramka ichida 'S.M.Z AI' tugmasi, bosilsa grafik o'rniga AI tahlil."""
-    S["ai_view"] = False
+    """Full-screen chart layer: header row (info, S.M.Z AI, close) and TradingView filling the rest."""
     exch = row["exchange"] if row is not None and "exchange" in row else None
     full_sym = chart_symbol(sym, exch)
-
-    @st.dialog(sym, width="large")
-    def _dialog():
+    with keyed("chartfs"):
+        try:
+            top = st.columns([7, 1.3, 1.0], vertical_alignment="center")
+        except TypeError:
+            top = st.columns([7, 1.3, 1.0])
+        parts = [f"<b>{html.escape(sym)}</b>"]
+        if row is not None:
+            parts += [f"${row['close']:.2f}", f"{row['chg']:+.2f}%"]
+            if pd.notna(row["relvol"]):
+                parts.append(f"Rel Volume {row['relvol']:.1f}")
+            if pd.notna(row["rsi"]):
+                parts.append(f"RSI {row['rsi']:.0f}")
+            if pd.notna(row["atr"]):
+                parts.append(f"ATR {row['atr']:.2f}")
+            if "atrp" in row.index and pd.notna(row["atrp"]):
+                parts.append(f"ATR% {row['atrp']:.1f}")
+            if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
+                parts.append(f"Spike20 {int(row['spike20'])}")
+        top[0].markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
+        if AI_OK:
+            if S.get("ai_view"):
+                stretch(top[1].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+            else:
+                stretch(top[1].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+        stretch(top[2].button, "✕ Close", key="chart_close", on_click=_chart_close)
         if AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
-            return
-        with st.container(border=True):
-            left, right = st.columns([5, 1])
-            if row is not None:
-                parts = [f"<b>${row['close']:.2f}</b>", f"{row['chg']:+.2f}%"]
-                if pd.notna(row["relvol"]):
-                    parts.append(f"Rel Volume {row['relvol']:.1f}")
-                if pd.notna(row["rsi"]):
-                    parts.append(f"RSI {row['rsi']:.0f}")
-                if pd.notna(row["atr"]):
-                    parts.append(f"ATR {row['atr']:.2f}")
-                if "atrp" in row.index and pd.notna(row["atrp"]):
-                    parts.append(f"ATR% {row['atrp']:.1f}")
-                if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
-                    parts.append(f"Spike20 {int(row['spike20'])}")
-                left.markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>',
-                              unsafe_allow_html=True)
-            if AI_OK:
-                stretch(right.button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        chart_widget(full_sym, 700, 165)
-
-    _dialog()
+        else:
+            chart_widget(full_sym, 700, 95)
 
 
 if __name__ == "__main__":
