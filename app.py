@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -408,6 +408,22 @@ button[data-testid="stBaseButton-secondary"]{-webkit-backdrop-filter:none !impor
 /* keep the bottom-right corner free (Streamlit Cloud "Manage app" button lives there) */
 .block-container{padding-bottom:4.5rem !important}
 .st-key-chartfs{padding-bottom:46px !important}
+
+/* ---- six navigation tabs, keyboard focus, readable labels, small screens ---- */
+.st-key-nav button{padding:6px 12px !important}
+.st-key-nav button p{font-size:1.02rem !important}
+button:focus-visible,input:focus-visible,[role="option"]:focus-visible{outline:2px solid #10B981 !important;outline-offset:2px}
+[data-testid="stWidgetLabel"] p,label p{color:#b4bac4 !important}
+.st-key-guide{max-width:980px}
+.st-key-guide h3,.st-key-guide h4{letter-spacing:-.01em}
+@media (max-width: 820px){
+  .block-container{padding:2.4rem .5rem 4.5rem .5rem !important}
+  .kpi{min-width:84px}
+  .tp-i{font-size:.9rem;padding:0 18px}
+  .nw{flex-direction:column}
+  .nimg{flex:0 0 auto;width:100%}
+  .st-key-nav button p{font-size:.9rem !important}
+}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -1271,6 +1287,14 @@ def init_state() -> None:
         S.setdefault(k, v)
     S.setdefault("sort_by", "Change")
     S.setdefault("sort_asc", False)
+    if "watchlist" not in S:  # the watchlist lives in the page URL (?wl=AAA,BBB): survives reloads, can be shared
+        try:
+            raw = st.query_params.get("wl", "")
+            if isinstance(raw, list):
+                raw = ",".join(raw)
+        except Exception:  # noqa: BLE001
+            raw = ""
+        S["watchlist"] = [t for t in (clean_symbol(x) for x in str(raw).split(",")) if t][:60]
 
 
 def reset_filters() -> None:
@@ -2283,16 +2307,202 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
 
 
 # =============================================================================
+# 7b. WATCHLIST | SIGNAL RESEARCH | GUIDE   (new tabs; the Screener is not touched)
+# =============================================================================
+def _wl_sync() -> None:
+    """Keep the watchlist in the address bar (?wl=AAA,BBB)."""
+    try:
+        wl = S.get("watchlist", [])
+        if wl:
+            st.query_params["wl"] = ",".join(wl)
+        elif "wl" in st.query_params:
+            del st.query_params["wl"]
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _wl_toggle(sym: str) -> None:
+    wl = list(S.get("watchlist", []))
+    if sym in wl:
+        wl.remove(sym)
+    else:
+        wl.append(sym)
+    S["watchlist"] = wl[:60]
+    _wl_sync()
+
+
+# same widget as the big chart, but with a fixed pixel height (for the small chart grid)
+GRID_TEMPLATE = CHART_TEMPLATE.replace("if (ph && ph > 0) { H = Math.max(520, ph - __OFFSET__); }", "")
+
+
+def grid_chart_doc(symbol: str, height: int = 380) -> str:
+    cfg = {"autosize": False, "width": "100%", "height": height, "symbol": symbol, "interval": "D",
+           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": "en",
+           "backgroundColor": "#000000", "allow_symbol_change": False, "hide_side_toolbar": True,
+           "withdateranges": False, "save_image": False, "calendar": False, "details": False,
+           "support_host": "https://www.tradingview.com"}
+    payload = json.dumps(cfg).replace("</", "<\\/")
+    return GRID_TEMPLATE.replace("__CFG__", payload).replace("__H__", str(int(height)))
+
+
+def view_watchlist(day: pd.DataFrame, meta: dict) -> list:
+    """Own list of stocks (saved in the page link) + a grid of up to 4 small charts."""
+    st.markdown('<div class="fsec">Watchlist</div>', unsafe_allow_html=True)
+    wl = list(S.get("watchlist", []))
+    options = sorted(day["ticker"].dropna().unique())
+    have = [t for t in wl if t in options]
+    keep = [t for t in wl if t not in options]
+    sel = st.multiselect("Tickers (you can also add with the ☆ button inside any chart)", options, default=have)
+    if sorted(sel) != sorted(have):
+        S["watchlist"] = (sel + keep)[:60]
+        _wl_sync()
+        st.rerun()
+    if not wl:
+        st.info("Your watchlist is empty. Pick tickers above, or press ☆ Watchlist inside any chart.")
+        return []
+    sub = day[day["ticker"].isin(wl)].sort_values("chg", ascending=False)
+    if sub.empty:
+        st.info("None of your tickers has data on the selected date.")
+        return []
+    show = to_display(sub, ["ticker", "sector", "close", "chg", "relvol", "rsi", "atrp"])
+    items = [render_table(show, "wl_tbl", min(520, 36 + 24 * len(show) + 4))]
+    st.caption("The list is saved in this page's address. Bookmark the link, or send it to someone, and the same list opens.")
+    st.markdown('<div class="fsec">Charts</div>', unsafe_allow_html=True)
+    order = list(sub["ticker"])
+    pick = st.multiselect("Charts to show (max 4)", order, default=order[:4], max_selections=4)
+    cols = st.columns(2)
+    for i, sym in enumerate(pick):
+        r = day[day["ticker"] == sym].iloc[0]
+        with cols[i % 2]:
+            render_iframe(grid_chart_doc(chart_symbol(sym, r.get("exchange")), 380), 380)
+    return items
+
+
+SIGNAL_INFO = {
+    "SMZ: Spike in last 20d + volume": "Cheap stock with a 30%+ day in the last 20 trading days and unusual volume today.",
+    "SMZ: Yesterday spiked + volume": "Cheap stock that jumped 20%+ on the selected day with very high volume (continuation or fade).",
+    "SMZ: Beaten down + volume": "Cheap, very volatile stock far below its 200-day average and 52-week high, with volume waking up.",
+    "SMZ: Sharp drop + volume": "Cheap stock that fell 20%+ on the selected day with high volume (possible rebound candidates).",
+}
+
+
+@st.cache_data(ttl=21600, show_spinner="Back-testing the S.M.Z signals on the stored history...")
+def backtest_signals(stamp: float, last_n: int = 250) -> pd.DataFrame:
+    """How did each S.M.Z signal do the NEXT trading day? Uses only the data already in the database."""
+    p, meta = load_data(stamp)
+    g = p.groupby("ticker", sort=False)
+    q = p.copy()
+    q["nxt"] = g["chg"].shift(-1)
+    dates = sorted(q["date"].unique())[-(last_n + 1):-1]
+    q = q[q["date"].isin(dates) & q["nxt"].notna()]
+
+    def spike(v):
+        return (v >= 30) & (v < 400)
+
+    base_hit = float(spike(q["nxt"]).mean() * 100) if len(q) else 0.0
+    rows = []
+    for name in [k for k in SIGNALS if k.startswith("SMZ")]:
+        s = dict(D)
+        s.update({k: v for k, v in SIGNALS[name].items() if k in D})
+        picked = []
+        for _, day in q.groupby("date"):
+            x = apply_filters(day, s, meta)
+            if len(x):
+                picked.append(x["nxt"])
+        v = pd.concat(picked) if picked else pd.Series(dtype=float)
+        n = int(len(v))
+        hit = float(spike(v).mean() * 100) if n else float("nan")
+        vc = v.clip(upper=400)
+        rows.append({"Signal": name, "Signals": n, "Spike rate": hit,
+                     "Lift vs all": (hit / base_hit) if n and base_hit else float("nan"),
+                     "Avg next day": float(vc.mean()) if n else float("nan"),
+                     "Median next day": float(v.median()) if n else float("nan"),
+                     "Up next day": float((v > 0).mean() * 100) if n else float("nan")})
+    rows.append({"Signal": "All stocks (baseline)", "Signals": int(len(q)), "Spike rate": base_hit,
+                 "Lift vs all": 1.0, "Avg next day": float(q["nxt"].clip(upper=400).mean()),
+                 "Median next day": float(q["nxt"].median()), "Up next day": float((q["nxt"] > 0).mean() * 100)})
+    return pd.DataFrame(rows)
+
+
+def view_signals(day: pd.DataFrame, meta: dict) -> list:
+    """Evidence for the S.M.Z signals (historical back-test) and today's matches."""
+    st.markdown('<div class="fsec">S.M.Z signal research</div>', unsafe_allow_html=True)
+    st.caption("Spike = the stock closed up 30%+ on the NEXT trading day (changes above 400% are ignored as splits). "
+               "This is a back-test on the history stored in this app: old results do not promise future results, "
+               "and small samples are noisy.")
+    res = backtest_signals(db_stamp())
+    fmt = {"Signals": "{:,.0f}", "Spike rate": "{:.2f}%", "Lift vs all": "{:.1f}x", "Avg next day": "{:+.2f}%",
+           "Median next day": "{:+.2f}%", "Up next day": "{:.1f}%"}
+    stretch(st.dataframe, res.style.format(fmt, na_rep="-"), hide_index=True)
+
+    names = [k for k in SIGNALS if k.startswith("SMZ")]
+    pick = st.selectbox("Show today's matches for", names, key="sig_pick")
+    st.caption(SIGNAL_INFO.get(pick, ""))
+    s = dict(D)
+    s.update({k: v for k, v in SIGNALS[pick].items() if k in D})
+    x = apply_filters(day, s, meta)
+    inv = {v: k for k, v in COLS.items()}
+    col = inv.get(SIGNALS[pick].get("sort_by", "Change"), "chg")
+    x = x.sort_values(col, ascending=bool(SIGNALS[pick].get("sort_asc", False)))
+    st.markdown(f'<div class="resline"><b>{S["date"]}</b> &nbsp;|&nbsp; {len(x)} stocks match '
+                '&nbsp;|&nbsp; click a row to open its chart</div>', unsafe_allow_html=True)
+    if x.empty:
+        st.info("No stocks match this signal on the selected date.")
+        return []
+    show = to_display(x, ["ticker", "sector", "close", "chg", "relvol", "atrp", "rsi", "spike20"])
+    return [render_table(show, "sig_tbl", min(560, 36 + 24 * len(show) + 4))]
+
+
+def view_guide() -> list:
+    """Short manual, indicator glossary and the legal notes."""
+    with keyed("guide"):
+        st.markdown("""
+### How to use S.M.Z
+1. **Home**: the dial shows the whole market by sector. Click a slice to open the sector; click a stock to open its chart.
+2. **Screener**: pick filters or a ready-made signal, then click a row to open the chart.
+3. **Watchlist**: keep your own list. Press ☆ inside any chart; the list is stored in the page address.
+4. **Signals**: see how the S.M.Z signals behaved on past data, and which stocks match today.
+5. **News**: company news and the macro calendar.
+
+### Indicators
+- **Change**: price change versus the previous close, in percent.
+- **Gap**: today's open versus the previous close.
+- **Rel Volume**: today's volume divided by the average volume of the previous 20 days. Above 2 means unusual interest.
+- **ATR / ATR %**: average daily range over 14 days, in price units and as a percent of the price. ATR % is comparable between cheap and expensive stocks.
+- **RSI (14)**: momentum from 0 to 100. Above 70 is often called overbought, below 30 oversold.
+- **SMA20 / 50 / 200**: distance of the price from its 20, 50 and 200 day average.
+- **52W High / Low**: distance from the 52-week high and low.
+- **Spike20**: number of days with a 30%+ close-to-close jump in the last 20 trading days.
+- **Market cap**: shares outstanding times price. The dial uses it for the size of each cell.
+
+### Signals
+The S.M.Z signals are research filters for cheap, volatile stocks. They produce a candidate list, not a buy or sell order. Most stocks on the list will not spike. Check the Signals tab for the historical numbers.
+
+### Data and sources
+Prices and company data come from the app's own database, which is updated by a separate loader (see the date at the bottom of the page). Charts are provided by TradingView, news by stockanalysis.com. Data can be delayed, incomplete or wrong.
+
+### Terms of use
+S.M.Z is provided "as is", for information and education only. It is not investment, legal or tax advice and not an offer to buy or sell any security. Trading, especially in low-priced stocks, can lose all of your money. You alone are responsible for your decisions.
+
+### Privacy
+S.M.Z has no accounts and stores no personal profile. Your watchlist is kept only in the address of your browser tab. The hosting platform may log technical data such as IP address. The TradingView charts and the AI analysis (which sends the ticker and its figures to the AI provider) are third-party services with their own policies.
+
+*This text is a plain-language notice, not legal advice. Have it reviewed by a lawyer before a commercial launch.*
+""")
+    return []
+
+
+# =============================================================================
 # 8. MAIN
 # =============================================================================
 def header(dates: list) -> tuple[str, Optional[str]]:
     """One sharp navigation row: brand | Home - Screener - News | date | search + Go."""
-    opts = ["Home", "Screener", "News"]
+    opts = ["Home", "Screener", "News", "Watchlist", "Signals", "Guide"]
     if S.get("view") not in opts:  # e.g. a stale "Overview" from an older session
         S.pop("view", None)
     forced = None
     with keyed("topbar"):
-        spec = [1.0, 2.1, 1.1, 3.0]
+        spec = [1.0, 3.9, 1.1, 2.2]
         try:
             c = st.columns(spec, vertical_alignment="center")
         except TypeError:
@@ -2355,11 +2565,22 @@ def main() -> None:
         items = view_home(day, meta)
     elif view == "News":
         items = view_news(day, meta)
+    elif view == "Watchlist":
+        items = view_watchlist(day, meta)
+    elif view == "Signals":
+        items = view_signals(day, meta)
+    elif view == "Guide":
+        items = view_guide()
     else:
         items = view_screener(day, meta)
 
     to_open, S["opened"] = decide_open(items, S.get("opened"), forced)
-    foot = f"© {BRAND} | For informational purposes only."
+    try:
+        upd = datetime.fromtimestamp(db_stamp(), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    except Exception:  # noqa: BLE001
+        upd = "-"
+    foot = (f"© {BRAND} | For informational purposes only, not investment advice. "
+            f"| Market data through {S.get('date', '-')} | database updated {upd}")
     st.caption(foot)
     inject_seo()
     # the chart stays open (in session state) until the user presses Close
@@ -2382,6 +2603,9 @@ try:
     AI_OK = True
 except Exception:  # noqa: BLE001  - the app still works without the AI module
     AI_OK = False
+
+
+AI_DAILY_LIMIT = 15  # analyses per browser session per day (protects the free AI quota)
 
 
 def _ai_open() -> None:
@@ -2407,9 +2631,15 @@ def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
         cache.pop(ckey, None)
 
     if ckey not in cache:
+        used = S.setdefault("ai_used", {})
+        today = dt.date.today().isoformat()
+        if used.get(today, 0) >= AI_DAILY_LIMIT:
+            st.warning(f"Kunlik AI limiti tugadi ({AI_DAILY_LIMIT} ta tahlil). Ertaga qayta urinib ko'ring.")
+            return
         with st.spinner(f"{sym} tahlil qilinmoqda..."):
             try:
                 cache[ckey] = run_analysis(sym, row)
+                used[today] = used.get(today, 0) + 1
             except Exception as e:  # noqa: BLE001
                 st.error(f"AI xatosi: {e}")
                 return
@@ -2425,9 +2655,9 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
     full_sym = chart_symbol(sym, exch)
     with keyed("chartfs"):
         try:
-            top = st.columns([6, 1.6, 1.3, 1.0], vertical_alignment="center")
+            top = st.columns([5, 1.3, 1.6, 1.3, 1.0], vertical_alignment="center")
         except TypeError:
-            top = st.columns([6, 1.6, 1.3, 1.0])
+            top = st.columns([5, 1.3, 1.6, 1.3, 1.0])
         parts = [f"<b>{html.escape(sym)}</b>"]
         if row is not None:
             parts += [f"${row['close']:.2f}", f"{row['chg']:+.2f}%"]
@@ -2442,18 +2672,21 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
             if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
                 parts.append(f"Spike20 {int(row['spike20'])}")
         top[0].markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
+        in_wl = sym in S.get("watchlist", [])
+        stretch(top[1].button, "★ Saved" if in_wl else "☆ Watchlist", key="wl_toggle",
+                on_click=_wl_toggle, args=(sym,))
         tv_url = "https://www.tradingview.com/chart/?symbol=" + urllib.parse.quote(full_sym, safe="")
         try:
-            stretch(top[1].link_button, "↗ TradingView", tv_url)
+            stretch(top[2].link_button, "↗ TradingView", tv_url)
         except Exception:  # noqa: BLE001 - old Streamlit without link_button
-            top[1].markdown(f'<a href="{html.escape(tv_url, quote=True)}" target="_blank" rel="noopener" '
+            top[2].markdown(f'<a href="{html.escape(tv_url, quote=True)}" target="_blank" rel="noopener" '
                             'style="color:#10B981;font-weight:600">↗ TradingView</a>', unsafe_allow_html=True)
         if AI_OK:
             if S.get("ai_view"):
-                stretch(top[2].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+                stretch(top[3].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
             else:
-                stretch(top[2].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        stretch(top[3].button, "✕ Close", key="chart_close", on_click=_chart_close)
+                stretch(top[3].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+        stretch(top[4].button, "✕ Close", key="chart_close", on_click=_chart_close)
         if AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
         else:
