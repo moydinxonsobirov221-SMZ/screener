@@ -2587,10 +2587,11 @@ def main() -> None:
     if to_open:
         S["chart_sym"] = to_open
         S["ai_view"] = False
+        S["news_view"] = False
     sym_open = S.get("chart_sym")
     if sym_open:
         r = day[day["ticker"] == sym_open]
-        open_chart(sym_open, r.iloc[0] if not r.empty else None)
+        open_chart(sym_open, r.iloc[0] if not r.empty else None, day)
 
 
 # =============================================================================
@@ -2610,15 +2611,23 @@ AI_DAILY_LIMIT = 15  # analyses per browser session per day (protects the free A
 
 def _ai_open() -> None:
     S["ai_view"] = True
+    S["news_view"] = False
 
 
 def _ai_close() -> None:
+    S["ai_view"] = False
+    S["news_view"] = False
+
+
+def _news_open() -> None:
+    S["news_view"] = True
     S["ai_view"] = False
 
 
 def _chart_close() -> None:
     S["chart_sym"] = None
     S["ai_view"] = False
+    S["news_view"] = False
 
 
 def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
@@ -2649,15 +2658,46 @@ def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
     st.caption("Bu moliyaviy maslahat emas. Qaror o'zingizniki.")
 
 
-def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
-    """Full-screen chart layer: header row (info, S.M.Z AI, close) and TradingView filling the rest."""
+@st.cache_data(ttl=600, show_spinner=False)
+def _stock_news(sym: str) -> list:
+    """News of ONE company (its own stockanalysis.com page). Errors are raised, so they are never cached."""
+    return _fetch_sa_stock(sym) or []
+
+
+def stock_news_panel(sym: str, chg: dict) -> None:
+    """Black full-screen section with the news of this single company only."""
+    st.markdown(f"### {sym} · company news")
+    periods = {"30 days": 720, "7 days": 168, "48 hours": 48, "24 hours": 24}
+    top = st.columns([1.2, 6.8])
+    period = top[0].selectbox("Period", list(periods), key="sn_period")
+    with st.spinner(f"{sym} yangiliklari yuklanmoqda..."):
+        try:
+            items = _stock_news(sym)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Yangiliklarni yuklab bo'lmadi: {type(e).__name__}")
+            return
+    cut = time.time() - periods[period] * 3600
+    arts = sorted(({**a, "main": sym} for a in items if a["ts"] >= cut), key=lambda a: -a["ts"])
+    if not arts:
+        st.info(f"{sym} uchun so'nggi {period} ichida yangilik topilmadi.")
+        return
+    top[1].caption(f"{len(arts)} news | newest first | source: stockanalysis.com")
+    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in arts) + "</div>",
+                unsafe_allow_html=True)
+
+
+def open_chart(sym: str, row: Optional[pd.Series] = None, day: Optional[pd.DataFrame] = None) -> None:
+    """Full-screen layer: header row (info, News, Watchlist, TradingView, S.M.Z AI, Close) and the chart,
+    the company news or the AI analysis below it."""
     exch = row["exchange"] if row is not None and "exchange" in row else None
     full_sym = chart_symbol(sym, exch)
+    chg = dict(zip(day["ticker"], day["chg"])) if day is not None else {}
+    spec = [4.2, 1.1, 1.3, 1.6, 1.3, 1.0]
     with keyed("chartfs"):
         try:
-            top = st.columns([5, 1.3, 1.6, 1.3, 1.0], vertical_alignment="center")
+            top = st.columns(spec, vertical_alignment="center")
         except TypeError:
-            top = st.columns([5, 1.3, 1.6, 1.3, 1.0])
+            top = st.columns(spec)
         parts = [f"<b>{html.escape(sym)}</b>"]
         if row is not None:
             parts += [f"${row['close']:.2f}", f"{row['chg']:+.2f}%"]
@@ -2672,22 +2712,28 @@ def open_chart(sym: str, row: Optional[pd.Series] = None) -> None:
             if "spike20" in row.index and pd.notna(row["spike20"]) and row["spike20"] > 0:
                 parts.append(f"Spike20 {int(row['spike20'])}")
         top[0].markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
+        if S.get("news_view"):
+            stretch(top[1].button, "← Grafikka qaytish", key="news_back", on_click=_ai_close)
+        else:
+            stretch(top[1].button, "News", key="news_open", on_click=_news_open)
         in_wl = sym in S.get("watchlist", [])
-        stretch(top[1].button, "★ Saved" if in_wl else "☆ Watchlist", key="wl_toggle",
+        stretch(top[2].button, "★ Saved" if in_wl else "☆ Watchlist", key="wl_toggle",
                 on_click=_wl_toggle, args=(sym,))
         tv_url = "https://www.tradingview.com/chart/?symbol=" + urllib.parse.quote(full_sym, safe="")
         try:
-            stretch(top[2].link_button, "↗ TradingView", tv_url)
+            stretch(top[3].link_button, "↗ TradingView", tv_url)
         except Exception:  # noqa: BLE001 - old Streamlit without link_button
-            top[2].markdown(f'<a href="{html.escape(tv_url, quote=True)}" target="_blank" rel="noopener" '
+            top[3].markdown(f'<a href="{html.escape(tv_url, quote=True)}" target="_blank" rel="noopener" '
                             'style="color:#10B981;font-weight:600">↗ TradingView</a>', unsafe_allow_html=True)
         if AI_OK:
             if S.get("ai_view"):
-                stretch(top[3].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+                stretch(top[4].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
             else:
-                stretch(top[3].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        stretch(top[4].button, "✕ Close", key="chart_close", on_click=_chart_close)
-        if AI_OK and S.get("ai_view"):
+                stretch(top[4].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
+        stretch(top[5].button, "✕ Close", key="chart_close", on_click=_chart_close)
+        if S.get("news_view"):
+            stock_news_panel(sym, chg)
+        elif AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
         else:
             chart_widget(full_sym, 700, 105)
