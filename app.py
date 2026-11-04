@@ -424,6 +424,14 @@ button:focus-visible,input:focus-visible,[role="option"]:focus-visible{outline:2
   .nimg{flex:0 0 auto;width:100%}
   .st-key-nav button p{font-size:.9rem !important}
 }
+
+/* ---- cheaper painting while scrolling: thin edge instead of big blurred shadows, no glow on the moving tape ---- */
+.tape,.slist,.st-key-secbox,.st-key-wheelpanel,.kpi,.st-key-filtergrid,.st-key-tablepanel,
+.st-key-topbar [data-testid="stColumn"],.st-key-topbar [data-testid="column"]{
+  box-shadow:inset 1px 1px 0 rgba(255,255,255,.07) !important}
+.st-key-topbar [data-testid="stColumn"] [data-testid="stColumn"],.st-key-topbar [data-testid="column"] [data-testid="column"]{
+  box-shadow:none !important}
+.tape .gem-g,.tape .gem-r{text-shadow:none !important}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -1630,6 +1638,18 @@ def build_bubble_payload(day: pd.DataFrame, perf_col: str, top_n: int, by_indust
 # =============================================================================
 # 6. VIEWS
 # =============================================================================
+@st.cache_data(ttl=21600, show_spinner=False)
+def tape_html_cached(date: str, stamp: float) -> str:
+    p, _ = load_data(stamp)
+    return tape_html(p[p["date"] == date])
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def bubble_payload_cached(date: str, perf_col: str, stamp: float) -> dict:
+    p, _ = load_data(stamp)
+    return build_bubble_payload(p[p["date"] == date], perf_col, 500, False)
+
+
 def view_stats(day: pd.DataFrame, meta: dict, show_kpi: bool = True) -> list:
     """Market statistics: optional KPIs + breadth bar, then the top lists."""
     items: list = []
@@ -1682,7 +1702,7 @@ def tape_html(day: pd.DataFrame) -> str:
 def view_home(day: pd.DataFrame, meta: dict) -> list:
     """Home: ticker tape, market summary (KPIs + breadth), then the interactive wheel map.
     The detailed top lists of the old Overview tab are tucked below in a collapsed block."""
-    st.markdown(tape_html(day), unsafe_allow_html=True)
+    st.markdown(tape_html_cached(str(S["date"]), db_stamp()), unsafe_allow_html=True)
     st.markdown(kpi_html(day), unsafe_allow_html=True)
     items = list(view_bubbles(day, meta))
     if st.toggle("Show market leaders (top lists)", key="show_stats", value=False):
@@ -1766,6 +1786,7 @@ def _fetch_sa_stock(t: str):
                 continue
             raise
         items = _parse_sa_news(page)
+        time.sleep(0.05)  # give the page (main thread) the CPU between two heavy parses
         for it in items:
             if t not in it["syms"]:
                 it["syms"].insert(0, t)
@@ -1788,7 +1809,7 @@ def _load_news_raw(tickers: tuple) -> dict:
         merge(_parse_sa_news(_sa_get(_SA_ALL_URL)))
     except Exception as e:  # noqa: BLE001
         stats["err"] = f"{type(e).__name__}: {e}"
-    ex = ThreadPoolExecutor(max_workers=8)
+    ex = ThreadPoolExecutor(max_workers=4)
     futs = {ex.submit(_fetch_sa_stock, t): t for t in tickers}
     try:
         for f in as_completed(futs, timeout=300):
@@ -1952,7 +1973,7 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     label = label_col.selectbox("Performance", list(PERF_COLS), key="bub_perf")
     perf_col = PERF_COLS[label]
     scale = 15.0  # color step 5%
-    payload = build_bubble_payload(day, perf_col, 500, False)
+    payload = bubble_payload_cached(str(S["date"]), perf_col, db_stamp())
 
     secs: dict = {}
     for n in payload["nodes"]:
@@ -2582,7 +2603,9 @@ def main() -> None:
     foot = (f"© {BRAND} | For informational purposes only, not investment advice. "
             f"| Market data through {S.get('date', '-')} | database updated {upd}")
     st.caption(foot)
-    inject_seo()
+    if not S.get("_seo_done"):
+        inject_seo()
+        S["_seo_done"] = True
     # the chart stays open (in session state) until the user presses Close
     if to_open:
         S["chart_sym"] = to_open
@@ -2686,7 +2709,7 @@ def stock_news_panel(sym: str, chg: dict) -> None:
                 unsafe_allow_html=True)
 
 
-def open_chart(sym: str, row: Optional[pd.Series] = None, day: Optional[pd.DataFrame] = None) -> None:
+def _open_chart_impl(sym: str, row: Optional[pd.Series] = None, day: Optional[pd.DataFrame] = None) -> None:
     """Full-screen layer: header row (info, News, Watchlist, TradingView, S.M.Z AI, Close) and the chart,
     the company news or the AI analysis below it."""
     exch = row["exchange"] if row is not None and "exchange" in row else None
@@ -2730,13 +2753,19 @@ def open_chart(sym: str, row: Optional[pd.Series] = None, day: Optional[pd.DataF
                 stretch(top[4].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
             else:
                 stretch(top[4].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        stretch(top[5].button, "✕ Close", key="chart_close", on_click=_chart_close)
+        if stretch(top[5].button, "✕ Close", key="chart_close"):
+            _chart_close()
+            st.rerun()  # full rerun: the page behind comes back
         if S.get("news_view"):
             stock_news_panel(sym, chg)
         elif AI_OK and S.get("ai_view"):
             ai_panel(sym, row)
         else:
             chart_widget(full_sym, 700, 105)
+
+
+# fragment: clicks inside the chart layer rerun only the layer (fast), not the whole page behind it
+open_chart = st.fragment(_open_chart_impl) if hasattr(st, "fragment") else _open_chart_impl
 
 
 if __name__ == "__main__":
