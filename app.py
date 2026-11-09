@@ -35,6 +35,472 @@ except Exception:  # newer framework versions may drop this module
 S = st.session_state
 
 # =============================================================================
+# 0. LANGUAGE  (O'zbekcha / Русский / English)
+#    tl("English text") returns the text in the chosen language. Financial indicator names
+#    (RSI, ATR, SMA ...) and the column headers of the Screener table stay in English on purpose:
+#    they are the same on every finance site; the Guide tab explains them in each language.
+# =============================================================================
+LANGS = {"uz": "O'zbekcha", "ru": "Русский", "en": "English"}
+
+SECTOR_NAMES = ["Information Technology", "Health Care", "Financials", "Consumer Discretionary", "Industrials",
+                "Energy", "Materials", "Real Estate", "Consumer Staples", "Communication Services", "Utilities",
+                "Other"]
+
+TRX = {
+    # navigation and top bar
+    "Home": ("Bosh sahifa", "Главная"),
+    "Screener": ("Skrener", "Скринер"),
+    "News": ("Yangiliklar", "Новости"),
+    "Watchlist": ("Kuzatuv ro'yxati", "Избранное"),
+    "Signals": ("Signallar", "Сигналы"),
+    "Guide": ("Qo'llanma", "Справка"),
+    "Search ticker": ("Ticker qidirish", "Поиск тикера"),
+    "Go": ("Ochish", "Открыть"),
+    "Enter a valid ticker (letters and digits only).": (
+        "To'g'ri ticker kiriting (faqat harf va raqam).", "Введите корректный тикер (только буквы и цифры)."),
+    "⚠ The database ends at {d}, but the market already traded {e}. The data updater has not loaded the newer session yet.": (
+        "⚠ Baza {d} sanada tugaydi, lekin bozor {e} kuni allaqachon savdo qilgan. Ma'lumot yangilovchisi yangi kunni hali yuklamagan.",
+        "⚠ База заканчивается {d}, но торги уже прошли {e}. Загрузчик данных ещё не добавил новую сессию."),
+    "For informational purposes only, not investment advice.": (
+        "Faqat ma'lumot uchun, investitsiya maslahati emas.", "Только для информации, не инвестиционная рекомендация."),
+    "Market data through {d}": ("Bozor ma'lumoti {d} gacha", "Рыночные данные по {d}"),
+    "database updated {u}": ("baza yangilangan: {u}", "база обновлена: {u}"),
+    # market summary tiles
+    "Stocks": ("Aksiyalar", "Акции"),
+    "Advancing": ("O'sganlar", "Растут"),
+    "Declining": ("Tushganlar", "Падают"),
+    "Avg change": ("O'rtacha o'zgarish", "Среднее изменение"),
+    "Above SMA20": ("SMA20 dan yuqori", "Выше SMA20"),
+    "Above SMA50": ("SMA50 dan yuqori", "Выше SMA50"),
+    "Above SMA200": ("SMA200 dan yuqori", "Выше SMA200"),
+    "New High": ("Yangi maksimum", "Новый максимум"),
+    "New Low": ("Yangi minimum", "Новый минимум"),
+    "$ Volume": ("$ Hajm", "$ Объём"),
+    # home
+    "Performance": ("Natija davri", "Период"),
+    "Today": ("Bugun", "Сегодня"),
+    "Week": ("Hafta", "Неделя"),
+    "Month": ("Oy", "Месяц"),
+    "Quarter": ("Chorak", "Квартал"),
+    "{n} stocks shown": ("{n} ta aksiya ko'rsatilmoqda", "Показано акций: {n}"),
+    "{n} without market cap data": ("{n} tasida kapitalizatsiya ma'lumoti yo'q", "{n} без данных о капитализации"),
+    "click a sector slice (or use the box below) to enter it": (
+        "sektorga kirish uchun doira bo'lagini bosing (yoki pastdagi tugmalardan foydalaning)",
+        "нажмите на сектор круга (или на кнопки ниже), чтобы открыть его"),
+    "inside {s}": ("{s} ichida", "внутри: {s}"),
+    "drag the dial to turn it, click a stock to open its chart": (
+        "aylanani sudrab buring, aksiyani bossangiz grafigi ochiladi",
+        "вращайте круг мышью, нажмите на акцию — откроется график"),
+    "Market cap data is still loading. The bubble map appears as soon as it is available.": (
+        "Bozor kapitalizatsiyasi ma'lumoti hali yuklanmoqda. Xarita tayyor bo'lishi bilan paydo bo'ladi.",
+        "Данные о капитализации ещё загружаются. Карта появится, как только они будут готовы."),
+    "The interactive map is not available in this environment.": (
+        "Interaktiv xarita bu muhitda mavjud emas.", "Интерактивная карта в этой среде недоступна."),
+    "Sectors": ("Sektorlar", "Сектора"),
+    "All sectors": ("Barcha sektorlar", "Все сектора"),
+    "No.": ("№", "№"),
+    "Ticker": ("Ticker", "Тикер"),
+    "Price": ("Narx", "Цена"),
+    "Change": ("O'zgarish", "Изм."),
+    "Show market leaders (top lists)": ("Bozor yetakchilarini ko'rsatish (top ro'yxatlar)", "Показать лидеров рынка"),
+    "No stocks": ("Aksiyalar yo'q", "Нет акций"),
+    "Top Gainers": ("Eng ko'p o'sganlar", "Лидеры роста"),
+    "Top Losers": ("Eng ko'p tushganlar", "Лидеры падения"),
+    "Most Active": ("Eng faol", "Самые активные"),
+    "Unusual Volume": ("G'ayrioddiy hajm", "Необычный объём"),
+    "Overbought": ("Haddan ortiq sotib olingan", "Перекуплены"),
+    "Oversold": ("Haddan ortiq sotilgan", "Перепроданы"),
+    "Most Volatile": ("Eng o'zgaruvchan", "Самые волатильные"),
+    "Gap Up": ("Gap yuqoriga", "Гэп вверх"),
+    "Low Price Runner": ("Arzon aksiya yuguruvchi", "Бегущая дешёвая акция"),
+    "None": ("Yo'q", "Нет"),
+    "Any": ("Hammasi", "Любой"),
+    "Up": ("O'sgan", "Рост"),
+    "Down": ("Tushgan", "Падение"),
+    # sectors
+    "Information Technology": ("Axborot texnologiyalari", "Информационные технологии"),
+    "Health Care": ("Sog'liqni saqlash", "Здравоохранение"),
+    "Financials": ("Moliya", "Финансы"),
+    "Consumer Discretionary": ("Davriy iste'mol tovarlari", "Потребительские товары (циклические)"),
+    "Industrials": ("Sanoat", "Промышленность"),
+    "Energy": ("Energetika", "Энергетика"),
+    "Materials": ("Xomashyo va materiallar", "Материалы"),
+    "Real Estate": ("Ko'chmas mulk", "Недвижимость"),
+    "Consumer Staples": ("Zaruriy iste'mol tovarlari", "Товары первой необходимости"),
+    "Communication Services": ("Aloqa xizmatlari", "Коммуникационные услуги"),
+    "Utilities": ("Kommunal xizmatlar", "Коммунальные услуги"),
+    "Other": ("Boshqa", "Другое"),
+    # dial (circle map)
+    "Top 21 gainers": ("Eng ko'p o'sgan 21 ta", "Топ-21 роста"),
+    "Top 21 losers": ("Eng ko'p tushgan 21 ta", "Топ-21 падения"),
+    "Last": ("Oxirgi", "Цена"),
+    "Sector": ("Sektor", "Сектор"),
+    "stocks": ("ta aksiya", "акций"),
+    "click to enter": ("kirish uchun bosing", "нажмите, чтобы открыть"),
+    "Market Cap": ("Bozor kapitalizatsiyasi", "Капитализация"),
+    "Volume": ("Hajm", "Объём"),
+    "Size: Market Cap | Color: {p} performance | drag to turn the dial": (
+        "O'lcham: bozor kapitalizatsiyasi | Rang: {p} natijasi | aylanani sudrab buring",
+        "Размер: капитализация | Цвет: динамика ({p}) | вращайте круг мышью"),
+    # news
+    "Company news": ("Kompaniya yangiliklari", "Новости компаний"),
+    "Macro": ("Makro", "Макро"),
+    "Period": ("Davr", "Период"),
+    "24 hours": ("24 soat", "24 часа"),
+    "48 hours": ("48 soat", "48 часов"),
+    "7 days": ("7 kun", "7 дней"),
+    "30 days": ("30 kun", "30 дней"),
+    "Loading company news in the background. This takes about a minute the first time; the page updates by itself and stays usable meanwhile.": (
+        "Kompaniya yangiliklari fonda yuklanmoqda. Birinchi marta taxminan bir daqiqa ketadi; sahifa o'zi yangilanadi va bu vaqtda ishlashda davom etadi.",
+        "Новости компаний загружаются в фоне. В первый раз это занимает около минуты; страница обновится сама и остаётся доступной."),
+    "{c} of {t} stocks ({p}%) have news in the last {period} | biggest movers first | source: stockanalysis.com ({ok} pages loaded)": (
+        "So'nggi {period} ichida {t} ta aksiyadan {c} tasida ({p}%) yangilik bor | avval eng katta o'zgarganlar | manba: stockanalysis.com ({ok} ta sahifa yuklandi)",
+        "За последние {period} новости есть у {c} из {t} акций ({p}%) | сначала самые сильные движения | источник: stockanalysis.com (загружено страниц: {ok})"),
+    "No company news found for this period. stockanalysis.com pages loaded: {ok}, failed: {fail}, news items parsed: {parsed}.{why}": (
+        "Bu davr uchun kompaniya yangiliklari topilmadi. stockanalysis.com: yuklangan sahifalar {ok}, xato {fail}, o'qilgan yangiliklar {parsed}.{why}",
+        "За этот период новостей не найдено. stockanalysis.com: загружено страниц {ok}, ошибок {fail}, разобрано новостей {parsed}.{why}"),
+    "Economic calendar: central banks, inflation, jobs and other events that move the whole market": (
+        "Iqtisodiy kalendar: markaziy banklar, inflyatsiya, bandlik va butun bozorga ta'sir qiladigan boshqa voqealar",
+        "Экономический календарь: центробанки, инфляция, занятость и другие события, двигающие весь рынок"),
+    "Other symbols:": ("Boshqa tickerlar:", "Другие тикеры:"),
+    "{m} min ago": ("{m} daqiqa oldin", "{m} мин назад"),
+    "{h} h ago": ("{h} soat oldin", "{h} ч назад"),
+    "{d} d ago": ("{d} kun oldin", "{d} дн. назад"),
+    "Show more": ("Yana ko'rsatish", "Показать ещё"),
+    "Show original (English)": ("Asl matn (inglizcha)", "Оригинал (английский)"),
+    "Translated by AI. Financial terms are kept consistent; check the original for important decisions.": (
+        "AI tarjimasi. Moliyaviy atamalar bir xil saqlanadi; muhim qarorlar uchun asl matnni tekshiring.",
+        "Перевод выполнен ИИ. Финансовые термины унифицированы; для важных решений сверяйтесь с оригиналом."),
+    "Translation is not available now (no AI key or a temporary error). The original English text is shown.": (
+        "Tarjima hozir mavjud emas (AI kaliti yo'q yoki vaqtinchalik xato). Asl inglizcha matn ko'rsatilmoqda.",
+        "Перевод сейчас недоступен (нет ключа ИИ или временная ошибка). Показан оригинал на английском."),
+    "{s} · company news": ("{s} · kompaniya yangiliklari", "{s} · новости компании"),
+    "Loading {s} news...": ("{s} yangiliklari yuklanmoqda...", "Загрузка новостей {s}..."),
+    "Could not load the news: {e}": ("Yangiliklarni yuklab bo'lmadi: {e}", "Не удалось загрузить новости: {e}"),
+    "No news for {s} in the last {p}.": ("{s} uchun so'nggi {p} ichida yangilik topilmadi.", "Новостей по {s} за последние {p} нет."),
+    "{n} news | newest first | source: stockanalysis.com": (
+        "{n} ta yangilik | yangilari birinchi | manba: stockanalysis.com",
+        "Новостей: {n} | сначала новые | источник: stockanalysis.com"),
+    # chart layer
+    "← Back to chart": ("← Grafikka qaytish", "← К графику"),
+    "☆ Watchlist": ("☆ Kuzatuvga", "☆ В избранное"),
+    "★ Saved": ("★ Saqlangan", "★ В избранном"),
+    "✕ Close": ("✕ Yopish", "✕ Закрыть"),
+    "Rel Volume": ("Nisbiy hajm", "Отн. объём"),
+    "↻ Re-run analysis": ("↻ Qayta tahlil", "↻ Повторить анализ"),
+    "Analysing {s}...": ("{s} tahlil qilinmoqda...", "Анализ {s}..."),
+    "AI error: {e}": ("AI xatosi: {e}", "Ошибка ИИ: {e}"),
+    "This is not financial advice. The decision is yours.": (
+        "Bu moliyaviy maslahat emas. Qaror o'zingizniki.", "Это не финансовая рекомендация. Решение за вами."),
+    "Daily AI limit reached ({n} analyses). Try again tomorrow.": (
+        "Kunlik AI limiti tugadi ({n} ta tahlil). Ertaga qayta urinib ko'ring.",
+        "Дневной лимит ИИ исчерпан ({n} анализов). Попробуйте завтра."),
+    # screener labels (labels only, the filters themselves are untouched)
+    "Filters": ("Filtrlar", "Фильтры"),
+    "{n} active": ("{n} ta faol", "активно: {n}"),
+    "Reset": ("Tozalash", "Сбросить"),
+    "Descriptive Filters": ("Umumiy filtrlar", "Общие фильтры"),
+    "Technical & Trend Filters": ("Texnik va trend filtrlari", "Технические и трендовые фильтры"),
+    "Exchange": ("Birja", "Биржа"),
+    "Average Volume": ("O'rtacha hajm", "Средний объём"),
+    "Relative Volume": ("Nisbiy hajm", "Относительный объём"),
+    "Signal": ("Signal", "Сигнал"),
+    "Gap %": ("Gap % (ochilish farqi)", "Гэп % (разрыв открытия)"),
+    "ATR ($)": ("ATR ($, kunlik diapazon)", "ATR ($, дневной диапазон)"),
+    "RSI (14)": ("RSI (14, impuls)", "RSI (14, импульс)"),
+    "52-Week High/Low": ("52 haftalik maksimum/minimum", "52-нед. максимум/минимум"),
+    "SMA20": ("SMA20 (20 kunlik o'rtacha)", "SMA20 (средняя за 20 дней)"),
+    "SMA50": ("SMA50 (50 kunlik o'rtacha)", "SMA50 (средняя за 50 дней)"),
+    "SMA200": ("SMA200 (200 kunlik o'rtacha)", "SMA200 (средняя за 200 дней)"),
+    "ATR % (of price)": ("ATR % (narxdan foiz)", "ATR % (от цены)"),
+    "Spike (30%+ in 20 days)": ("Sakrash (20 kunda 30%+)", "Скачок (30%+ за 20 дней)"),
+    "{date} | {n} stocks | click a row to open its chart": (
+        "{date} | {n} ta aksiya | grafikni ochish uchun qatorni bosing",
+        "{date} | акций: {n} | нажмите на строку, чтобы открыть график"),
+    "Ascending": ("O'sish tartibida", "По возрастанию"),
+    "Export": ("Eksport", "Экспорт"),
+    "No stocks match these filters. Try loosening them.": (
+        "Bu filtrlarga mos aksiya yo'q. Filtrlarni yumshatib ko'ring.", "Нет акций под эти фильтры. Попробуйте смягчить условия."),
+    # signal names (Screener "Signal" box)
+    "SMZ: Spike in last 20d + volume": ("SMZ: 20 kun ichida sakrash + hajm", "SMZ: скачок за 20 дней + объём"),
+    "SMZ: Yesterday spiked + volume": ("SMZ: kecha sakragan + hajm", "SMZ: вчерашний скачок + объём"),
+    "SMZ: Beaten down + volume": ("SMZ: qattiq tushgan + hajm", "SMZ: сильно упавшие + объём"),
+    "SMZ: Sharp drop + volume": ("SMZ: keskin pasayish + hajm", "SMZ: резкое падение + объём"),
+    # market cap options
+    "Small ($300mln to $2bln)": ("Kichik ($300 mln dan $2 mlrd gacha)", "Малая ($300 млн – $2 млрд)"),
+    "Micro ($50mln to $300mln)": ("Mikro ($50 mln dan $300 mln gacha)", "Микро ($50 – $300 млн)"),
+    "Nano (under $50mln)": ("Nano ($50 mln dan past)", "Нано (до $50 млн)"),
+    "Under $2bln": ("$2 mlrd dan past", "Ниже $2 млрд"),
+    "Under $300mln": ("$300 mln dan past", "Ниже $300 млн"),
+    "Over $2bln": ("$2 mlrd dan yuqori", "Выше $2 млрд"),
+    "Translating...": ("Tarjima qilinmoqda...", "Перевод..."),
+    # watchlist
+    "Tickers (you can also add with the ☆ button inside any chart)": (
+        "Tickerlar (grafik ichidagi ☆ tugmasi bilan ham qo'shish mumkin)", "Тикеры (можно также добавить кнопкой ☆ внутри графика)"),
+    "Your watchlist is empty. Pick tickers above, or press ☆ Watchlist inside any chart.": (
+        "Kuzatuv ro'yxatingiz bo'sh. Yuqoridan ticker tanlang yoki istalgan grafikda ☆ tugmasini bosing.",
+        "Список пуст. Выберите тикеры выше или нажмите ☆ внутри любого графика."),
+    "None of your tickers has data on the selected date.": (
+        "Tanlangan sanada ro'yxatdagi tickerlar bo'yicha ma'lumot yo'q.", "На выбранную дату нет данных по вашим тикерам."),
+    "The list is saved in this page's address. Bookmark the link, or send it to someone, and the same list opens.": (
+        "Ro'yxat shu sahifa manzilida saqlanadi. Havolani xatcho'pga qo'shing yoki birovga yuboring, xuddi shu ro'yxat ochiladi.",
+        "Список хранится в адресе страницы. Добавьте ссылку в закладки или отправьте другому человеку — откроется тот же список."),
+    "Charts": ("Grafiklar", "Графики"),
+    "Charts to show (max 4)": ("Ko'rsatiladigan grafiklar (ko'pi bilan 4 ta)", "Графики для показа (не более 4)"),
+    # signals research
+    "S.M.Z signal research": ("S.M.Z signallari tadqiqoti", "Исследование сигналов S.M.Z"),
+    "Spike = the stock closed up 30%+ on the NEXT trading day (changes above 400% are ignored as splits). This is a back-test on the history stored in this app: old results do not promise future results, and small samples are noisy.": (
+        "Sakrash = aksiya KEYINGI savdo kunida 30%+ ga o'sib yopilgan (400% dan katta o'zgarishlar split deb hisobga olinmaydi). Bu shu ilovadagi tarix bo'yicha tekshiruv: o'tmish natijasi kelajakni kafolatlamaydi, kichik namunalar esa ishonchsiz.",
+        "Скачок = акция закрылась ростом 30%+ на СЛЕДУЮЩИЙ торговый день (изменения выше 400% игнорируются как сплиты). Это проверка на истории, сохранённой в приложении: прошлые результаты не гарантируют будущих, а малые выборки шумные."),
+    "Show today's matches for": ("Bugungi mos aksiyalarni ko'rsatish:", "Показать подходящие акции для:"),
+    "{date} | {n} stocks match | click a row to open its chart": (
+        "{date} | {n} ta aksiya mos | grafikni ochish uchun qatorni bosing",
+        "{date} | подходит акций: {n} | нажмите на строку, чтобы открыть график"),
+    "No stocks match this signal on the selected date.": (
+        "Tanlangan sanada bu signalga mos aksiya yo'q.", "На выбранную дату нет акций под этот сигнал."),
+    "Signals ": ("Signallar soni", "Число сигналов"),
+    "Spike rate": ("Sakrash foizi", "Доля скачков"),
+    "Lift vs all": ("Barcha aksiyalarga nisbatan", "Относительно всех акций"),
+    "Avg next day": ("Keyingi kun o'rtacha", "Среднее на след. день"),
+    "Median next day": ("Keyingi kun mediana", "Медиана на след. день"),
+    "Up next day": ("Keyingi kun o'sgan", "Рост на след. день"),
+    "All stocks (baseline)": ("Barcha aksiyalar (taqqoslash uchun)", "Все акции (база сравнения)"),
+    "Cheap stock with a 30%+ day in the last 20 trading days and unusual volume today.": (
+        "Arzon aksiya: oxirgi 20 savdo kunida 30%+ o'sgan kun bo'lgan va bugun hajm g'ayrioddiy katta.",
+        "Дешёвая акция: за последние 20 торговых дней был рост 30%+, сегодня необычно высокий объём."),
+    "Cheap stock that jumped 20%+ on the selected day with very high volume (continuation or fade).": (
+        "Arzon aksiya: tanlangan kunda 20%+ sakragan va hajmi juda katta (davom etishi yoki qaytishi mumkin).",
+        "Дешёвая акция: в выбранный день выросла на 20%+ при очень большом объёме (продолжение или откат)."),
+    "Cheap, very volatile stock far below its 200-day average and 52-week high, with volume waking up.": (
+        "Arzon va juda o'zgaruvchan aksiya: 200 kunlik o'rtachadan va 52 haftalik maksimumdan ancha past, hajmi esa oshmoqda.",
+        "Дешёвая, очень волатильная акция: далеко ниже 200-дневной средней и 52-недельного максимума, объём растёт."),
+    "Cheap stock that fell 20%+ on the selected day with high volume (possible rebound candidates).": (
+        "Arzon aksiya: tanlangan kunda 20%+ tushgan va hajmi katta (qaytish nomzodlari bo'lishi mumkin).",
+        "Дешёвая акция: в выбранный день упала на 20%+ при большом объёме (возможные кандидаты на отскок)."),
+}
+
+# The chosen language lives in session_state["lang"] (and in the address: ?lang=uz).
+
+
+def lang() -> str:
+    v = S.get("lang", "uz")
+    return v if v in LANGS else "en"
+
+
+def tl(s: str, **kw) -> str:
+    """Translate an English UI text into the chosen language (unknown texts stay as they are)."""
+    l = lang()
+    tr = TRX.get(s)
+    out = s if (l == "en" or tr is None) else tr[0 if l == "uz" else 1]
+    if kw:
+        try:
+            return out.format(**kw)
+        except Exception:  # noqa: BLE001
+            return out
+    return out
+
+
+def opt_label(x) -> str:
+    """Translate the text of one dropdown option. The option VALUE (used by the filters) never changes."""
+    x = str(x)
+    l = lang()
+    if l == "en" or x in TRX:
+        return tl(x)
+    uz = l == "uz"
+    m = re.fullmatch(r"(Up|Down) (\d+)%", x)
+    if m:
+        return (f"O'sish ≥ {m.group(2)}%" if m.group(1) == "Up" else f"Tushish ≥ {m.group(2)}%") if uz else \
+               (f"Рост ≥ {m.group(2)}%" if m.group(1) == "Up" else f"Падение ≥ {m.group(2)}%")
+    m = re.fullmatch(r"(Under|Over) (.+)", x)
+    if m:
+        v = m.group(2)
+        if uz:
+            return f"{v} dan past" if m.group(1) == "Under" else f"{v} dan yuqori"
+        return f"Ниже {v}" if m.group(1) == "Under" else f"Выше {v}"
+    m = re.fullmatch(r"\$(\d+) to \$(\d+)", x)
+    if m:
+        return f"${m.group(1)} dan ${m.group(2)} gacha" if uz else f"от ${m.group(1)} до ${m.group(2)}"
+    m = re.fullmatch(r"(Not )?(Overbought|Oversold) \((.+)\)", x)
+    if m:
+        base = {("Overbought", True): "Haddan ortiq sotib olingan", ("Oversold", True): "Haddan ortiq sotilgan",
+                ("Overbought", False): "Перекуплен", ("Oversold", False): "Перепродан"}[(m.group(2), uz)]
+        if m.group(1):
+            return f"{base} emas ({m.group(3)})" if uz else f"Не {base.lower()} ({m.group(3)})"
+        return f"{base} ({m.group(3)})"
+    m = re.fullmatch(r"Price (?:(\d+)% )?(above|below) (SMA\d+)", x)
+    if m:
+        pct, side, sma = m.group(1), m.group(2), m.group(3)
+        if uz:
+            return f"Narx {sma} dan " + (f"{pct}% " if pct else "") + ("yuqori" if side == "above" else "past")
+        return "Цена " + (f"на {pct}% " if pct else "") + ("выше " if side == "above" else "ниже ") + sma
+    m = re.fullmatch(r"(\d+)-(\d+)% (below|above) (High|Low)", x)
+    if m:
+        a, b, side, hl = m.groups()
+        if uz:
+            return f"{'Maksimum' if hl == 'High' else 'Minimum'}dan {a}-{b}% " + ("past" if side == "below" else "yuqori")
+        return f"На {a}-{b}% " + ("ниже" if side == "below" else "выше") + (" максимума" if hl == "High" else " минимума")
+    m = re.fullmatch(r"(\d+)% or more (below|above) (High|Low)", x)
+    if m:
+        a, side, hl = m.groups()
+        if uz:
+            return f"{'Maksimum' if hl == 'High' else 'Minimum'}dan {a}%+ " + ("past" if side == "below" else "yuqori")
+        return f"Ниже максимума на {a}%+" if (side == "below") else f"Выше минимума на {a}%+"
+    return x
+
+
+def tv_locale() -> str:
+    """TradingView widgets speak Russian and English (no Uzbek): Uzbek users get English there."""
+    return "ru" if lang() == "ru" else "en"
+
+
+def dial_tx() -> dict:
+    """Texts for the circle map (drawn inside its own iframe)."""
+    return {"gain": tl("Top 21 gainers"), "lose": tl("Top 21 losers"), "last": tl("Last"), "sector": tl("Sector"),
+            "change": tl("Change"), "stocks": tl("stocks"), "enter": tl("click to enter"), "mcap": tl("Market Cap"),
+            "price": tl("Price"), "volume": tl("Volume"), "tick": tl("Ticker"),
+            "sec": {k: tl(k) for k in SECTOR_NAMES}}
+
+
+# ---- AI translation of news (Groq, free tier). Cached for everybody, so each text is translated once. ----
+TR_MODEL = "llama-3.3-70b-versatile"
+_TR_RULES_UZ = (
+    "You are a professional financial-news translator. Translate English stock-market news into natural, accurate "
+    "Uzbek (Latin alphabet: o', g', sh, ch). Keep ticker symbols, company and product names, numbers, currencies "
+    "and percentages unchanged. Never add or drop facts; keep the exact meaning. Use these standard terms: "
+    "shares/stock = aksiya; earnings = daromad hisoboti; revenue = tushum; net loss = sof zarar; net income = sof foyda; "
+    "offering = aksiyalarni qo'shimcha chiqarish; reverse split = aksiyalarni birlashtirish (reverse split); "
+    "delisting = birjadan chiqarilish (delisting); guidance = kompaniya prognozi; upgrade = reytingni oshirish; "
+    "downgrade = reytingni pasaytirish; price target = maqsadli narx; short squeeze = short squeeze; "
+    "FDA approval = FDA tasdig'i; merger = qo'shilish; acquisition = sotib olish; buyback = aksiyalarni qayta sotib olish; "
+    "dividend = dividend; premarket = bozor ochilishidan oldingi savdo; trading halt = savdoni to'xtatish; "
+    "SEC filing = SEC ga topshirilgan hujjat; clinical trial = klinik sinov; lawsuit = sud da'vosi. "
+    "Output ONLY a JSON array of strings with the same length and order as the input array.")
+_TR_RULES_RU = (
+    "You are a professional financial-news translator. Translate English stock-market news into natural, accurate "
+    "Russian. Keep ticker symbols, company and product names, numbers, currencies and percentages unchanged. "
+    "Never add or drop facts; keep the exact meaning. Use these standard terms: shares/stock = акции; "
+    "earnings = финансовые результаты (отчётность); revenue = выручка; net loss = чистый убыток; net income = чистая прибыль; "
+    "offering = дополнительное размещение акций; reverse split = обратный сплит; delisting = делистинг; "
+    "guidance = прогноз компании; upgrade = повышение рейтинга; downgrade = понижение рейтинга; "
+    "price target = целевая цена; short squeeze = шорт-сквиз; FDA approval = одобрение FDA; merger = слияние; "
+    "acquisition = поглощение; buyback = выкуп акций; dividend = дивиденд; premarket = предрыночная торговля; "
+    "trading halt = приостановка торгов; SEC filing = документ, поданный в SEC; clinical trial = клиническое исследование; "
+    "lawsuit = судебный иск. Output ONLY a JSON array of strings with the same length and order as the input array.")
+
+
+@st.cache_resource(show_spinner=False)
+def _tr_store() -> dict:
+    return {"cache": {}, "lock": threading.Lock(), "err": ""}
+
+
+def _groq_key() -> str:
+    try:
+        for k in ("GROQ_API_KEY", "groq_api_key", "GROQ_KEY"):
+            v = st.secrets.get(k)
+            if v:
+                return str(v)
+    except Exception:  # noqa: BLE001
+        pass
+    return os.environ.get("GROQ_API_KEY", "")
+
+
+def _groq_translate(texts: list, l: str) -> list:
+    key = _groq_key()
+    if not key:
+        raise RuntimeError("no AI key (GROQ_API_KEY)")
+    body = {"model": TR_MODEL, "temperature": 0.1,
+            "messages": [{"role": "system", "content": _TR_RULES_UZ if l == "uz" else _TR_RULES_RU},
+                         {"role": "user", "content": json.dumps(texts, ensure_ascii=False)}]}
+    req = urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
+                                 data=json.dumps(body).encode("utf-8"),
+                                 headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                                          "User-Agent": "smz-screener/1.0"})
+    for attempt in (0, 1):
+        try:
+            with urllib.request.urlopen(req, timeout=45) as r:
+                out = json.loads(r.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt == 0:
+                time.sleep(3)
+                continue
+            raise
+    txt = out["choices"][0]["message"]["content"]
+    m = re.search(r"\[.*\]", txt, re.S)
+    arr = json.loads(m.group(0)) if m else None
+    if not isinstance(arr, list) or len(arr) != len(texts):
+        raise ValueError("bad translation answer")
+    return [str(x) for x in arr]
+
+
+def _translate_texts(texts: list, l: str) -> dict:
+    store = _tr_store()
+    cache = store["cache"]
+    need = [x for x in texts if (l, x) not in cache]
+    batches = [need[i:i + 8] for i in range(0, len(need), 8)]
+
+    def work(b: list) -> None:
+        try:
+            res = _groq_translate(b, l)
+            with store["lock"]:
+                for src, dst in zip(b, res):
+                    if dst and dst.strip():
+                        cache[(l, src)] = dst.strip()
+        except Exception as e:  # noqa: BLE001
+            store["err"] = f"{type(e).__name__}: {e}"
+
+    if batches:
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            list(ex.map(work, batches))
+    return {x: cache[(l, x)] for x in texts if (l, x) in cache}
+
+
+def translate_arts(arts: list, orig: bool = False) -> tuple:
+    """News articles in the chosen language. Returns (articles, all_translated)."""
+    l = lang()
+    if l == "en" or orig or not arts:
+        return arts, True
+    texts: list = []
+    for a in arts:
+        for k in ("title", "summary"):
+            v = a.get(k) or ""
+            if v and v not in texts:
+                texts.append(v)
+    got = _translate_texts(texts, l)
+    ok = all(x in got for x in texts)
+    out = [{**a, "title": got.get(a["title"], a["title"]),
+            "summary": got.get(a["summary"], a["summary"]) if a.get("summary") else ""} for a in arts]
+    return out, ok
+
+
+def news_lang_bar(key: str) -> None:
+    """Small bar above the news list: 'show original' switch (only for Uzbek / Russian)."""
+    if lang() != "en":
+        st.checkbox(tl("Show original (English)"), key=key)
+
+
+def news_lang_note(ok: bool, orig: bool) -> None:
+    if lang() == "en" or orig:
+        return
+    if ok:
+        st.caption(tl("Translated by AI. Financial terms are kept consistent; check the original for important decisions."))
+    else:
+        st.caption(tl("Translation is not available now (no AI key or a temporary error). The original English text is shown."))
+
+
+def _lang_sync() -> None:
+    try:
+        st.query_params["lang"] = S.get("lang", "uz")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _news_more() -> None:
+    S["news_limit"] = int(S.get("news_limit", 20)) + 20
+
+
+
+# =============================================================================
 # 1. CONFIG
 # =============================================================================
 DB_PATH = "data.db"
@@ -432,6 +898,7 @@ button:focus-visible,input:focus-visible,[role="option"]:focus-visible{outline:2
 .st-key-topbar [data-testid="stColumn"] [data-testid="stColumn"],.st-key-topbar [data-testid="column"] [data-testid="column"]{
   box-shadow:none !important}
 .tape .gem-g,.tape .gem-r{text-shadow:none !important}
+.flabel{font-size:.72rem;font-weight:600;color:#b4bac4;margin:0 0 3px 0;line-height:1.2}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
@@ -547,7 +1014,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
   var GREEN = ["#10B981", "#0B8F66", "#065F46"], RED = ["#EF4444", "#C62F3E", "#8B1A2B"];
   var EXP = 0.32, CLICK_DEG = 3.6;
-  var args = null, lastKey = null, resizeTimer = null;
+  var args = null, lastKey = null, resizeTimer = null, TX = {};
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
   var audio = null, muted = false, lastClickT = 0;
 
@@ -573,6 +1040,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   function fmtCap(m) { return m >= 1000 ? "$" + (m / 1000).toFixed(2) + "B" : "$" + m.toFixed(1) + "M"; }
   function fmtPct(v) { return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"; }
   function clamp(a, b, v) { return Math.max(a, Math.min(b, v)); }
+  function SN(n) { return (TX.sec && TX.sec[n]) || n; }
 
   function loadD3(done) {
     if (window.d3) { done(true); return; }
@@ -625,7 +1093,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       [RED[0], "0 .. -" + f(s) + "%"], [GREEN[0], "0 .. +" + f(s) + "%"],
       [GREEN[1], "+" + f(s) + " .. +" + f(2 * s) + "%"], [GREEN[2], "\u2265 +" + f(2 * s) + "%"]];
     document.getElementById("legend").innerHTML =
-      "<div>Size: Market Cap &nbsp;|&nbsp; Color: " + esc(label) + " performance &nbsp;|&nbsp; drag to turn the dial</div><div class=\"strip\">" +
+      "<div>" + esc(TX.legend || ("Size: Market Cap | Color: " + label + " performance | drag to turn the dial")) + "</div><div class=\"strip\">" +
       items.map(function (it) { return "<span style=\"background:" + it[0] + ";color:#fff\">" + it[1] + "</span>"; }).join("") + "</div>";
   }
 
@@ -783,7 +1251,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 
   function draw(a, force) {
     var H = frameH(), W = document.body.clientWidth || window.innerWidth || 1000;
-    var key = JSON.stringify([a.nodes, a.sectors, a.scale, a.perf_label, a.gainers, a.losers, a.mode]) + "|" + W + "|" + H;
+    var key = JSON.stringify([a.nodes, a.sectors, a.scale, a.perf_label, a.gainers, a.losers, a.mode, a.tx]) + "|" + W + "|" + H;
     if (!force && key === lastKey) { return; }
     lastKey = key;
     setHeight(H);
@@ -791,6 +1259,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   }
 
   function build(a, W, H) {
+    TX = a.tx || {};
     var nodes = a.nodes || [], pizza = a.mode === "pizza", scale = +a.scale || 15, step = scale / 3;
     var svg = d3.select("#svg"), svg2 = d3.select("#svg2");
     svg.on(".drag", null);
@@ -978,9 +1447,9 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         .attr("fill", function (g) { return fillFor(g.perf); })
         .attr("stroke", "rgba(0,0,0,.6)").attr("stroke-width", 1.4).style(NS, "non-scaling-stroke")
         .on("mouseover", function (ev, g) {
-          tipP.innerHTML = "<b>" + esc(g.name) + "</b><br>" + g.count + " stocks<br>Market Cap " + fmtCap(g.mcap) +
+          tipP.innerHTML = "<b>" + esc(SN(g.name)) + "</b><br>" + g.count + " " + (TX.stocks || "stocks") + "<br>" + (TX.mcap || "Market Cap") + " " + fmtCap(g.mcap) +
             "<br>" + esc(a.perf_label || "Today") + " <span style=\"color:" + color(g.perf) + "\">" + fmtPct(g.perf) +
-            "</span><br><i>click to enter</i>";
+            "</span><br><i>" + (TX.enter || "click to enter") + "</i>";
           tipP.style.display = "block";
           d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 2);
         })
@@ -1006,7 +1475,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       var pc = pl.append("g").attr("class", "ctr");
       pc.append("text").attr("class", "t").attr("text-anchor", "middle")
         .attr("font-size", function (g) { return clamp(9, 20, Math.sqrt(g.a1 - g.a0) * R * 0.07); })
-        .attr("y", -2).text(function (g) { return g.name; });
+        .attr("y", -2).text(function (g) { return SN(g.name); });
       pc.append("text").attr("class", "p").attr("text-anchor", "middle")
         .attr("font-size", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055); })
         .attr("y", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055) + 4; })
@@ -1025,7 +1494,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
     var cv = document.createElement("canvas").getContext("2d");
     var rc1 = R + nb * 0.25, rc2 = R + nb * 0.76, rc0 = R + nb * 0.5;
     groups.forEach(function (g, idx) {
-      var m = g.am, top = true, lines = [g.name];   /* every name has the same orientation */
+      var m = g.am, top = true, lines = [SN(g.name)];   /* every name has the same orientation */
       var hh = Math.max(0.04, (g.a1 - g.a0) / 2 - 0.014);
       lines.forEach(function (txt, li) {
         var rc = lines.length === 1 ? rc0 : (top ? (li === 0 ? rc2 : rc1) : (li === 0 ? rc1 : rc2));
@@ -1132,13 +1601,13 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         el.style.left = x + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
         el.style.fontSize = clamp(11, 14, rh * 0.58) + "px";
         var h = "<div class=\"hd " + (isGain ? "g" : "r") + "\">" + title + "</div>" +
-          "<div class=\"row cols\"><span class=\"rk\">#</span><span class=\"tk\">Ticker</span><span class=\"px\">Last</span>" +
-          "<span class=\"sc\">Sector</span><span class=\"pc\">Change</span></div>";
+          "<div class=\"row cols\"><span class=\"rk\">#</span><span class=\"tk\">" + (TX.tick || "Ticker") + "</span><span class=\"px\">" + (TX.last || "Last") + "</span>" +
+          "<span class=\"sc\">" + (TX.sector || "Sector") + "</span><span class=\"pc\">" + (TX.change || "Change") + "</span></div>";
         (rows || []).slice(0, 21).forEach(function (r, i) {
           h += "<div class=\"row " + (isGain ? "g" : "r") + "\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px\">" +
             "<span class=\"rk\">" + (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span>" +
             "<span class=\"px\">" + (+r.price).toFixed(2) + "</span>" +
-            "<span class=\"sc\">" + esc(SEC[r.sector] || r.sector || "-") + "</span>" +
+            "<span class=\"sc\">" + esc((TX.sec && TX.sec[r.sector]) || SEC[r.sector] || r.sector || "-") + "</span>" +
             "<span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
         });
         el.innerHTML = h;
@@ -1154,16 +1623,16 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
         });
       }
       var lab = esc(a.perf_label || "Today");
-      fill("gl", a.gainers, "\u25B2 Top 21 gainers \u00B7 " + lab, true, W / 2 - R3 - gap - wl);
-      fill("ll", a.losers, "\u25BC Top 21 losers \u00B7 " + lab, false, W / 2 + R3 + gap);
+      fill("gl", a.gainers, "\u25B2 " + (TX.gain || "Top 21 gainers") + " \u00B7 " + lab, true, W / 2 - R3 - gap - wl);
+      fill("ll", a.losers, "\u25BC " + (TX.lose || "Top 21 losers") + " \u00B7 " + lab, false, W / 2 + R3 + gap);
     })();
 
     var tip = document.getElementById("tip");
     function tipHtml(d) {
       var x = d.d;
-      return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(x.sector) + "<br>Market Cap " + fmtCap(x.mcap) + "<br>" +
+      return "<b>" + esc(x.ticker) + "</b> &nbsp;" + esc(SN(x.sector)) + "<br>" + (TX.mcap || "Market Cap") + " " + fmtCap(x.mcap) + "<br>" +
         esc(a.perf_label || "Today") + " <span style=\"color:" + color(x.perf) + ";text-shadow:0 0 6px " + (x.perf >= 0 ? "rgba(16,185,129,.25)" : "rgba(239,68,68,.25)") + "\">" + fmtPct(x.perf) + "</span>" +
-        "<br>Price $" + (+x.price).toFixed(2) + "<br>Volume " + Math.round(x.volume).toLocaleString("en-US");
+        "<br>" + (TX.price || "Price") + " $" + (+x.price).toFixed(2) + "<br>" + (TX.volume || "Volume") + " " + Math.round(x.volume).toLocaleString("en-US");
     }
     cells.on("mouseover", function (ev, d) {
         tip.innerHTML = tipHtml(d); tip.style.display = "block";
@@ -1295,6 +1764,14 @@ def init_state() -> None:
         S.setdefault(k, v)
     S.setdefault("sort_by", "Change")
     S.setdefault("sort_asc", False)
+    if "lang" not in S:
+        try:
+            raw = st.query_params.get("lang", "")
+            if isinstance(raw, list):
+                raw = raw[0] if raw else ""
+        except Exception:  # noqa: BLE001
+            raw = ""
+        S["lang"] = raw if raw in LANGS else "uz"
     if "watchlist" not in S:  # the watchlist lives in the page URL (?wl=AAA,BBB): survives reloads, can be shared
         try:
             raw = st.query_params.get("wl", "")
@@ -1430,7 +1907,7 @@ def chart_doc(symbol: str, init_height: int = 700, offset: int = 170) -> str:
     otherwise init_height is used. Pixel sizes avoid the 'tiny chart' problem of percent sizing.
     """
     cfg = {"autosize": False, "width": "100%", "height": init_height, "symbol": symbol, "interval": "D",
-           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": "en",
+           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": tv_locale(),
            "backgroundColor": "#000000", "allow_symbol_change": True, "hide_side_toolbar": False,
            "withdateranges": True, "save_image": True, "calendar": False, "details": False,
            "support_host": "https://www.tradingview.com"}
@@ -1534,7 +2011,7 @@ def kpi_html(day: pd.DataFrame) -> str:
         cls = "gem-g" if c == GREEN else "gem-r" if c == RED else ""
         return f'class="{cls}"' if cls else 'style="color:#e6edf3"'
 
-    out = "".join(f'<div class="kpi"><span>{a}</span><b {_kb(c)}>{b}</b></div>' for a, b, c in tiles)
+    out = "".join(f'<div class="kpi"><span>{tl(a)}</span><b {_kb(c)}>{b}</b></div>' for a, b, c in tiles)
     total = max(n, 1)
     bar = (f'<div class="bar"><div style="width:{adv / total * 100:.1f}%;background:{GREEN}"></div>'
            f'<div style="width:{unch / total * 100:.1f}%;background:{GREY}"></div>'
@@ -1569,7 +2046,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v34", path=str(d))
+        return components.declare_component("smz_bubbles_v35", path=str(d))
     except Exception:
         return None
 
@@ -1669,10 +2146,10 @@ def view_stats(day: pd.DataFrame, meta: dict, show_kpi: bool = True) -> list:
     cols = st.columns(4)
     for i, (title, fn) in enumerate(lists):
         with cols[i % 4]:
-            st.markdown(f'<div class="ttl">{title}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="ttl">{tl(title)}</div>', unsafe_allow_html=True)
             sub = fn(day)
             if sub.empty:
-                st.caption("No stocks")
+                st.caption(tl("No stocks"))
                 continue
             show = to_display(sub, MINI_COLS)
             items.append(render_table(show, f"mini_{i}", 36 + 24 * len(show) + 4))
@@ -1705,7 +2182,7 @@ def view_home(day: pd.DataFrame, meta: dict) -> list:
     st.markdown(tape_html_cached(str(S["date"]), db_stamp()), unsafe_allow_html=True)
     st.markdown(kpi_html(day), unsafe_allow_html=True)
     items = list(view_bubbles(day, meta))
-    if st.toggle("Show market leaders (top lists)", key="show_stats", value=False):
+    if st.toggle(tl("Show market leaders (top lists)"), key="show_stats", value=False):
         items += view_stats(day, meta, show_kpi=False)
     return items
 
@@ -1859,14 +2336,19 @@ def news_data(tickers: tuple):
 
 def _ago(ts: float) -> str:
     sec = max(0, time.time() - ts)
+    if lang() == "en":
+        if sec < 3600:
+            return f"{max(1, int(sec // 60))} min ago"
+        if sec < 86400:
+            h = int(sec // 3600)
+            return f"{h} hour{'s' if h > 1 else ''} ago"
+        d = int(sec // 86400)
+        return f"{d} day{'s' if d > 1 else ''} ago"
     if sec < 3600:
-        m = max(1, int(sec // 60))
-        return f"{m} min ago"
+        return tl("{m} min ago", m=max(1, int(sec // 60)))
     if sec < 86400:
-        h = int(sec // 3600)
-        return f"{h} hour{'s' if h > 1 else ''} ago"
-    d = int(sec // 86400)
-    return f"{d} day{'s' if d > 1 else ''} ago"
+        return tl("{h} h ago", h=int(sec // 3600))
+    return tl("{d} d ago", d=int(sec // 86400))
 
 
 def _chg_span(g) -> str:
@@ -1887,20 +2369,21 @@ def news_card_html(a: dict, chg: dict) -> str:
              if a["url"] else f'<span class="nttl">{_h(a["title"])}</span>')
     summ = f'<div class="nsum">{_h(a["summary"])}</div>' if a["summary"] else ""
     others = [t for t in syms if t != main][:6]
-    oth = ("<div class=\"nsyms\">Other symbols: " +
+    oth = ("<div class=\"nsyms\">" + tl("Other symbols:") + " " +
            "".join(f'<span class="nchip">{_h(t)}{_chg_span(chg.get(t))}</span>' for t in others) + "</div>") if others else ""
     return f'<div class="nw"><div class="nimg">{img}</div><div class="nbody"><div class="nmeta">{meta}</div>{title}{summ}{oth}</div></div>'
 
 
 def _company_news(day: pd.DataFrame) -> None:
     top = st.columns([1.2, 6.8])
-    period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=0, key="news_period")
+    top[0].markdown(f'<div class="flabel">{html.escape(tl("Period"))}</div>', unsafe_allow_html=True)
+    period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=0, key="news_period",
+                              label_visibility="collapsed", format_func=tl)
     hours = {"24 hours": 24, "48 hours": 48, "7 days": 168}[period]
     tickers = tuple(sorted(day["ticker"].dropna().unique()))
     data, loading = news_data(tickers)
     if data is None:
-        st.info("Loading company news in the background. This takes about a minute the first time; "
-                "the page updates by itself and stays usable meanwhile.")
+        st.info(tl("Loading company news in the background. This takes about a minute the first time; the page updates by itself and stays usable meanwhile."))
         if loading and hasattr(st, "fragment"):
             time.sleep(3)
             st.rerun(scope="fragment")
@@ -1926,32 +2409,40 @@ def _company_news(day: pd.DataFrame) -> None:
         a["syms"] = [a["main"]] + [t for t in a["syms"] if t != a["main"]]
     covered = {t for a in arts for t in a["mine"]}
     pct = len(covered) / max(len(tickers), 1) * 100
-    top[1].caption(f"{len(covered)} of {len(tickers)} stocks ({pct:.0f}%) have news in the last {period} "
-                   f"| biggest movers first | source: stockanalysis.com ({data['ok']} pages loaded)")
+    top[1].caption(tl("{c} of {t} stocks ({p}%) have news in the last {period} | biggest movers first | source: stockanalysis.com ({ok} pages loaded)",
+                      c=len(covered), t=len(tickers), p=f"{pct:.0f}", period=tl(period), ok=data["ok"]))
     if not arts:
         why = f" Last error: {data['err']}." if data.get("err") else ""
-        st.info("No company news found for this period. "
-                f"stockanalysis.com pages loaded: {data['ok']}, failed: {data['fail']}, news items parsed: {data['parsed']}.{why}")
+        st.info(tl("No company news found for this period. stockanalysis.com pages loaded: {ok}, failed: {fail}, news items parsed: {parsed}.{why}",
+                   ok=data["ok"], fail=data["fail"], parsed=data["parsed"], why=why))
         return
     ranked = sorted(arts, key=lambda a: (-score(a["main"]), -a["ts"]))[:100]
-    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in ranked) + "</div>",
+    news_lang_bar("news_orig")
+    orig = bool(S.get("news_orig"))
+    limit = 100 if (lang() == "en" or orig) else int(S.get("news_limit", 20))
+    with st.spinner(tl("Translating...")):
+        shown, ok = translate_arts(ranked[:limit], orig)
+    news_lang_note(ok, orig)
+    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in shown) + "</div>",
                 unsafe_allow_html=True)
+    if len(ranked) > limit:
+        st.button(tl("Show more"), key="news_more", on_click=_news_more)
 
 
 company_news = st.fragment(_company_news) if hasattr(st, "fragment") else _company_news
 
 
 def macro_news() -> None:
-    st.caption("Economic calendar: central banks, inflation, jobs and other events that move the whole market")
-    render_iframe(EVENTS_DOC, 840)
+    st.caption(tl("Economic calendar: central banks, inflation, jobs and other events that move the whole market"))
+    render_iframe(EVENTS_DOC.replace('"locale": "en"', f'"locale": "{tv_locale()}"'), 840)
 
 
 def view_news(day: pd.DataFrame, meta: dict) -> list:
     opts = ["Company news", "Macro"]
     if hasattr(st, "segmented_control"):
-        sub = st.segmented_control("News section", opts, default=opts[0], key="news_sub", label_visibility="collapsed")
+        sub = st.segmented_control("News section", opts, default=opts[0], key="news_sub", label_visibility="collapsed", format_func=tl)
     else:
-        sub = st.radio("News section", opts, horizontal=True, key="news_sub", label_visibility="collapsed")
+        sub = st.radio("News section", opts, horizontal=True, key="news_sub", label_visibility="collapsed", format_func=tl)
     if sub == "Macro":
         macro_news()
     else:
@@ -1967,10 +2458,12 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     """Radial map. All sectors: pizza map (one slice per sector, coloured by the sector's overall move).
     One sector picked (click a slice or use the box below): every company of that sector fills the full circle."""
     if not meta["has_fund"]:
-        st.info("Market cap data is still loading. The bubble map appears as soon as it is available.")
+        st.info(tl("Market cap data is still loading. The bubble map appears as soon as it is available."))
         return []
     label_col, cap_col = st.columns([1.1, 6.9])
-    label = label_col.selectbox("Performance", list(PERF_COLS), key="bub_perf")
+    label_col.markdown(f'<div class="flabel">{html.escape(tl("Performance"))}</div>', unsafe_allow_html=True)
+    label = label_col.selectbox("Performance", list(PERF_COLS), key="bub_perf", label_visibility="collapsed",
+                                format_func=tl)
     perf_col = PERF_COLS[label]
     scale = 15.0  # color step 5%
     payload = bubble_payload_cached(str(S["date"]), perf_col, db_stamp())
@@ -1987,14 +2480,15 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
     nodes = payload["nodes"] if chosen == "All" else [n for n in payload["nodes"] if n["sector"] == chosen]
     hidden = int((day["mcap"].isna() | (day["mcap"] <= 0)).sum())
     if chosen == "All":
-        hint = "click a sector slice (or use the box below) to enter it"
+        hint = tl("click a sector slice (or use the box below) to enter it")
     else:
-        hint = f"inside {chosen}"
-    cap_col.caption(f"{len(nodes)} stocks shown" + (f" | {hidden} without market cap data" if hidden else "")
-                    + f" | {hint} | drag the dial to turn it, click a stock to open its chart")
+        hint = tl("inside {s}", s=tl(chosen))
+    cap_col.caption(tl("{n} stocks shown", n=len(nodes))
+                    + (" | " + tl("{n} without market cap data", n=hidden) if hidden else "")
+                    + f" | {hint} | " + tl("drag the dial to turn it, click a stock to open its chart"))
     comp = get_bubble_component()
     if comp is None:
-        st.warning("The interactive map is not available in this environment.")
+        st.warning(tl("The interactive map is not available in this environment."))
         return []
 
     valid = day.dropna(subset=[perf_col])
@@ -2016,10 +2510,10 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
                 w = g["mcap"]
                 sec_rows.append(dict(name=str(name), mcap=float(w.sum()),
                                      perf=float((g["perf"] * w).sum() / w.sum()), count=int(len(g))))
-            ev = comp(nodes=[], sectors=sec_rows, scale=3.0, perf_label=label, gainers=gainers,
+            ev = comp(nodes=[], sectors=sec_rows, scale=3.0, perf_label=tl(label), tx=dict(dial_tx(), legend=tl("Size: Market Cap | Color: {p} performance | drag to turn the dial", p=tl(label))), gainers=gainers,
                       losers=losers, mode="pizza", key="smz_bubbles", default=None)
         else:
-            ev = comp(nodes=nodes, sectors=[], scale=15.0, perf_label=label, gainers=gainers,
+            ev = comp(nodes=nodes, sectors=[], scale=15.0, perf_label=tl(label), tx=dict(dial_tx(), legend=tl("Size: Market Cap | Color: {p} performance | drag to turn the dial", p=tl(label))), gainers=gainers,
                       losers=losers, mode="all", key="smz_bubbles", default=None)
 
     # a pizza slice was clicked: enter that sector
@@ -2031,13 +2525,13 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
 
     box = keyed("secbox")
     with box:
-        st.markdown('<div class="ttl">Sectors</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="ttl">{html.escape(tl("Sectors"))}</div>', unsafe_allow_html=True)
         names = ["All"] + sector_names
         per_row = 6
         for r0 in range(0, len(names), per_row):
             cols = st.columns(per_row)
             for j, nm in enumerate(names[r0:r0 + per_row]):
-                stretch(cols[j].button, "All sectors" if nm == "All" else nm, key=f"secbtn_{r0 + j}",
+                stretch(cols[j].button, tl("All sectors") if nm == "All" else tl(nm), key=f"secbtn_{r0 + j}",
                         type="primary" if nm == chosen else "secondary", on_click=_pick_sector, args=(nm,))
 
     if chosen != "All":
@@ -2053,8 +2547,8 @@ def view_bubbles(day: pd.DataFrame, meta: dict) -> list:
 def sector_list_html(day: pd.DataFrame, sector: str) -> str:
     """Every stock of one sector as framed rows: number, ticker, price, daily change."""
     x = day[day["sector"] == sector].sort_values("ticker")
-    rows = ['<div class="slist"><div class="r h"><span>No.</span><span>Ticker</span><span>Price</span>'
-            '<span>Change</span></div>']
+    rows = [f'<div class="slist"><div class="r h"><span>{tl("No.")}</span><span>{tl("Ticker")}</span>'
+            f'<span>{tl("Price")}</span><span>{tl("Change")}</span></div>']
     for i, (_, r) in enumerate(x.iterrows(), 1):
         chg = r["chg"]
         if pd.isna(chg):
@@ -2070,7 +2564,9 @@ def sector_list_html(day: pd.DataFrame, sector: str) -> str:
 
 
 def _sel(col, label, options, key, disabled=False):
-    col.selectbox(label, list(options), key=key, disabled=disabled)
+    col.markdown(f'<div class="flabel">{html.escape(tl(label))}</div>', unsafe_allow_html=True)
+    col.selectbox(label, list(options), key=key, disabled=disabled, label_visibility="collapsed",
+                  format_func=opt_label)
 
 
 def reset_all() -> None:
@@ -2089,11 +2585,12 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
             head = st.columns([6, 1.1], vertical_alignment="center")
         except TypeError:
             head = st.columns([6, 1.1])
-        head[0].markdown(f'<div class="resline"><b>Filters</b> &nbsp;|&nbsp; {_n_active()} active</div>',
-                         unsafe_allow_html=True)
-        head[1].button("Reset", on_click=reset_all, key="reset_btn")
+        n_act = tl("{n} active", n=_n_active())
+        head[0].markdown('<div class="resline"><b>' + html.escape(tl("Filters")) + "</b> &nbsp;|&nbsp; "
+                         + html.escape(n_act) + "</div>", unsafe_allow_html=True)
+        head[1].button(tl("Reset"), on_click=reset_all, key="reset_btn")
 
-        st.markdown('<div class="fsec">Descriptive Filters</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fsec">{html.escape(tl("Descriptive Filters"))}</div>', unsafe_allow_html=True)
         a = st.columns(6)
         _sel(a[0], "Market Cap", MCAP_DT, "mcap", disabled=not meta["has_fund"])
         _sel(a[1], "Exchange", EXCHANGES, "exch", disabled=not meta["has_exchange"])
@@ -2101,9 +2598,11 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
         _sel(a[3], "Relative Volume", RELVOL, "relvol")
         _sel(a[4], "Price", PRICE, "price")
 
-        st.markdown('<div class="fsec">Technical &amp; Trend Filters</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fsec">{html.escape(tl("Technical & Trend Filters"))}</div>', unsafe_allow_html=True)
         b = st.columns(6)
-        b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal)
+        b[0].markdown(f'<div class="flabel">{html.escape(tl("Signal"))}</div>', unsafe_allow_html=True)
+        b[0].selectbox("Signal", list(SIGNALS), key="signal", on_change=apply_signal, label_visibility="collapsed",
+                       format_func=opt_label)
         _sel(b[1], "Change", CHANGE, "chg")
         _sel(b[2], "Gap %", GAP, "gap")
         _sel(b[3], "ATR ($)", ATR_OPT, "atr")
@@ -2306,18 +2805,18 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
             bar = st.columns(spec, vertical_alignment="center")
         except TypeError:
             bar = st.columns(spec)
-        bar[0].markdown(f'<div class="resline"><b>{S["date"]}</b> &nbsp;|&nbsp; {len(x)} stocks '
-                        '&nbsp;|&nbsp; click a row to open its chart</div>', unsafe_allow_html=True)
+        info_txt = tl("{date} | {n} stocks | click a row to open its chart", date=S["date"], n=len(x))
+        bar[0].markdown('<div class="resline">' + html.escape(info_txt) + "</div>", unsafe_allow_html=True)
         bar[1].selectbox("Order", names, key="sort_by", label_visibility="collapsed")
-        bar[2].checkbox("Ascending", key="sort_asc")
+        bar[2].checkbox(tl("Ascending"), key="sort_asc")
         inv = {v: k for k, v in COLS.items()}
         x = x.sort_values(inv[S["sort_by"]], ascending=bool(S["sort_asc"]))
         if not x.empty:
             full = to_display(x, order, with_no=True)
-            bar[3].download_button("Export", full.round(2).to_csv(index=False).encode(), "smz_screener.csv",
+            bar[3].download_button(tl("Export"), full.round(2).to_csv(index=False).encode(), "smz_screener.csv",
                                    "text/csv")
     if x.empty:
-        st.info("No stocks match these filters. Try loosening them.")
+        st.info(tl("No stocks match these filters. Try loosening them."))
         return []
     return [render_screener_table(full, 640)]
 
@@ -2358,7 +2857,7 @@ GRID_TEMPLATE = CHART_TEMPLATE.replace("if (ph && ph > 0) { H = Math.max(520, ph
 
 def grid_chart_doc(symbol: str, height: int = 380) -> str:
     cfg = {"autosize": False, "width": "100%", "height": height, "symbol": symbol, "interval": "D",
-           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": "en",
+           "timezone": "Asia/Tashkent", "theme": "dark", "style": "1", "locale": tv_locale(),
            "backgroundColor": "#000000", "allow_symbol_change": False, "hide_side_toolbar": True,
            "withdateranges": False, "save_image": False, "calendar": False, "details": False,
            "support_host": "https://www.tradingview.com"}
@@ -2368,29 +2867,29 @@ def grid_chart_doc(symbol: str, height: int = 380) -> str:
 
 def view_watchlist(day: pd.DataFrame, meta: dict) -> list:
     """Own list of stocks (saved in the page link) + a grid of up to 4 small charts."""
-    st.markdown('<div class="fsec">Watchlist</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="fsec">{html.escape(tl("Watchlist"))}</div>', unsafe_allow_html=True)
     wl = list(S.get("watchlist", []))
     options = sorted(day["ticker"].dropna().unique())
-    have = [t for t in wl if t in options]
-    keep = [t for t in wl if t not in options]
-    sel = st.multiselect("Tickers (you can also add with the ☆ button inside any chart)", options, default=have)
+    have = [x for x in wl if x in options]
+    keep = [x for x in wl if x not in options]
+    sel = st.multiselect(tl("Tickers (you can also add with the ☆ button inside any chart)"), options, default=have)
     if sorted(sel) != sorted(have):
         S["watchlist"] = (sel + keep)[:60]
         _wl_sync()
         st.rerun()
     if not wl:
-        st.info("Your watchlist is empty. Pick tickers above, or press ☆ Watchlist inside any chart.")
+        st.info(tl("Your watchlist is empty. Pick tickers above, or press ☆ Watchlist inside any chart."))
         return []
     sub = day[day["ticker"].isin(wl)].sort_values("chg", ascending=False)
     if sub.empty:
-        st.info("None of your tickers has data on the selected date.")
+        st.info(tl("None of your tickers has data on the selected date."))
         return []
     show = to_display(sub, ["ticker", "sector", "close", "chg", "relvol", "rsi", "atrp"])
     items = [render_table(show, "wl_tbl", min(520, 36 + 24 * len(show) + 4))]
-    st.caption("The list is saved in this page's address. Bookmark the link, or send it to someone, and the same list opens.")
-    st.markdown('<div class="fsec">Charts</div>', unsafe_allow_html=True)
+    st.caption(tl("The list is saved in this page's address. Bookmark the link, or send it to someone, and the same list opens."))
+    st.markdown(f'<div class="fsec">{html.escape(tl("Charts"))}</div>', unsafe_allow_html=True)
     order = list(sub["ticker"])
-    pick = st.multiselect("Charts to show (max 4)", order, default=order[:4], max_selections=4)
+    pick = st.multiselect(tl("Charts to show (max 4)"), order, default=order[:4], max_selections=4)
     cols = st.columns(2)
     for i, sym in enumerate(pick):
         r = day[day["ticker"] == sym].iloc[0]
@@ -2447,43 +2946,47 @@ def backtest_signals(stamp: float, last_n: int = 250) -> pd.DataFrame:
 
 def view_signals(day: pd.DataFrame, meta: dict) -> list:
     """Evidence for the S.M.Z signals (historical back-test) and today's matches."""
-    st.markdown('<div class="fsec">S.M.Z signal research</div>', unsafe_allow_html=True)
-    st.caption("Spike = the stock closed up 30%+ on the NEXT trading day (changes above 400% are ignored as splits). "
-               "This is a back-test on the history stored in this app: old results do not promise future results, "
-               "and small samples are noisy.")
-    res = backtest_signals(db_stamp())
+    st.markdown(f'<div class="fsec">{html.escape(tl("S.M.Z signal research"))}</div>', unsafe_allow_html=True)
+    st.caption(tl("Spike = the stock closed up 30%+ on the NEXT trading day (changes above 400% are ignored as splits). "
+                  "This is a back-test on the history stored in this app: old results do not promise future results, "
+                  "and small samples are noisy."))
+    res = backtest_signals(db_stamp()).copy()
+    res["Signal"] = res["Signal"].map(opt_label)
+    ren = {"Signals": tl("Signals "), "Signal": tl("Signal"), "Spike rate": tl("Spike rate"),
+           "Lift vs all": tl("Lift vs all"), "Avg next day": tl("Avg next day"),
+           "Median next day": tl("Median next day"), "Up next day": tl("Up next day")}
     fmt = {"Signals": "{:,.0f}", "Spike rate": "{:.2f}%", "Lift vs all": "{:.1f}x", "Avg next day": "{:+.2f}%",
            "Median next day": "{:+.2f}%", "Up next day": "{:.1f}%"}
-    stretch(st.dataframe, res.style.format(fmt, na_rep="-"), hide_index=True)
+    res = res.rename(columns=ren)
+    stretch(st.dataframe, res.style.format({ren[k]: v for k, v in fmt.items()}, na_rep="-"), hide_index=True)
 
     names = [k for k in SIGNALS if k.startswith("SMZ")]
-    pick = st.selectbox("Show today's matches for", names, key="sig_pick")
-    st.caption(SIGNAL_INFO.get(pick, ""))
+    pick = st.selectbox(tl("Show today's matches for"), names, key="sig_pick", format_func=opt_label)
+    st.caption(tl(SIGNAL_INFO.get(pick, "")))
     s = dict(D)
     s.update({k: v for k, v in SIGNALS[pick].items() if k in D})
     x = apply_filters(day, s, meta)
     inv = {v: k for k, v in COLS.items()}
     col = inv.get(SIGNALS[pick].get("sort_by", "Change"), "chg")
     x = x.sort_values(col, ascending=bool(SIGNALS[pick].get("sort_asc", False)))
-    st.markdown(f'<div class="resline"><b>{S["date"]}</b> &nbsp;|&nbsp; {len(x)} stocks match '
-                '&nbsp;|&nbsp; click a row to open its chart</div>', unsafe_allow_html=True)
+    match_txt = tl("{date} | {n} stocks match | click a row to open its chart", date=S["date"], n=len(x))
+    st.markdown('<div class="resline">' + html.escape(match_txt) + "</div>", unsafe_allow_html=True)
     if x.empty:
-        st.info("No stocks match this signal on the selected date.")
+        st.info(tl("No stocks match this signal on the selected date."))
         return []
     show = to_display(x, ["ticker", "sector", "close", "chg", "relvol", "atrp", "rsi", "spike20"])
     return [render_table(show, "sig_tbl", min(560, 36 + 24 * len(show) + 4))]
 
 
-def view_guide() -> list:
-    """Short manual, indicator glossary and the legal notes."""
-    with keyed("guide"):
-        st.markdown("""
+GUIDE = {
+    "en": """
 ### How to use S.M.Z
-1. **Home**: the dial shows the whole market by sector. Click a slice to open the sector; click a stock to open its chart.
+1. **Home**: the circle shows the whole market by sector. Click a slice to open the sector; click a stock to open its chart.
 2. **Screener**: pick filters or a ready-made signal, then click a row to open the chart.
 3. **Watchlist**: keep your own list. Press ☆ inside any chart; the list is stored in the page address.
 4. **Signals**: see how the S.M.Z signals behaved on past data, and which stocks match today.
-5. **News**: company news and the macro calendar.
+5. **News**: company news and the macro calendar. In Uzbek and Russian the news is translated by AI.
+6. **Language**: use the language box at the top (O'zbekcha, Русский, English).
 
 ### Indicators
 - **Change**: price change versus the previous close, in percent.
@@ -2494,7 +2997,7 @@ def view_guide() -> list:
 - **SMA20 / 50 / 200**: distance of the price from its 20, 50 and 200 day average.
 - **52W High / Low**: distance from the 52-week high and low.
 - **Spike20**: number of days with a 30%+ close-to-close jump in the last 20 trading days.
-- **Market cap**: shares outstanding times price. The dial uses it for the size of each cell.
+- **Market cap**: shares outstanding times price. The circle uses it for the size of each cell.
 
 ### Signals
 The S.M.Z signals are research filters for cheap, volatile stocks. They produce a candidate list, not a buy or sell order. Most stocks on the list will not spike. Check the Signals tab for the historical numbers.
@@ -2506,10 +3009,85 @@ Prices and company data come from the app's own database, which is updated by a 
 S.M.Z is provided "as is", for information and education only. It is not investment, legal or tax advice and not an offer to buy or sell any security. Trading, especially in low-priced stocks, can lose all of your money. You alone are responsible for your decisions.
 
 ### Privacy
-S.M.Z has no accounts and stores no personal profile. Your watchlist is kept only in the address of your browser tab. The hosting platform may log technical data such as IP address. The TradingView charts and the AI analysis (which sends the ticker and its figures to the AI provider) are third-party services with their own policies.
+S.M.Z has no accounts and stores no personal profile. Your watchlist and language are kept only in the address of your browser tab. The hosting platform may log technical data such as IP address. The TradingView charts and the AI services (analysis and news translation, which send the ticker, figures or news text to the AI provider) are third-party services with their own policies.
 
 *This text is a plain-language notice, not legal advice. Have it reviewed by a lawyer before a commercial launch.*
-""")
+""",
+    "uz": """
+### S.M.Z dan qanday foydalaniladi
+1. **Bosh sahifa**: doira butun bozorni sektorlar bo'yicha ko'rsatadi. Bo'lakni bossangiz sektor ochiladi; aksiyani bossangiz, uning grafigi ochiladi.
+2. **Skrener**: filtrlarni yoki tayyor signalni tanlang, grafikni ochish uchun qatorni bosing.
+3. **Kuzatuv ro'yxati**: o'z ro'yxatingizni yuriting. Istalgan grafikda ☆ tugmasini bosing; ro'yxat sahifa manzilida saqlanadi.
+4. **Signallar**: S.M.Z signallari o'tmishda qanday ishlagani va bugun qaysi aksiyalar mos kelishini ko'ring.
+5. **Yangiliklar**: kompaniya yangiliklari va makro kalendar. O'zbek va rus tillarida yangiliklar AI yordamida tarjima qilinadi.
+6. **Til**: yuqoridagi til oynasidan foydalaning (O'zbekcha, Русский, English).
+
+### Ko'rsatkichlar
+- **Change (o'zgarish)**: narxning oldingi yopilishga nisbatan o'zgarishi, foizda.
+- **Gap (ochilish farqi)**: bugungi ochilish narxining kechagi yopilishdan farqi.
+- **Rel Volume (nisbiy hajm)**: bugungi hajmning oldingi 20 kunlik o'rtacha hajmga nisbati. 2 dan yuqori bo'lsa, aksiyaga qiziqish g'ayrioddiy katta.
+- **ATR / ATR %**: 14 kunlik o'rtacha kunlik tebranish: narx birligida va narxdan foizda. ATR % arzon va qimmat aksiyalarni solishtirishga imkon beradi.
+- **RSI (14)**: 0 dan 100 gacha impuls ko'rsatkichi. 70 dan yuqori ko'pincha "haddan ortiq sotib olingan", 30 dan past "haddan ortiq sotilgan" deyiladi.
+- **SMA20 / 50 / 200**: narxning 20, 50 va 200 kunlik o'rtacha narxdan uzoqligi.
+- **52W High / Low**: 52 haftalik maksimum va minimumdan uzoqlik.
+- **Spike20**: oxirgi 20 savdo kunida yopilish narxi 30%+ ga sakragan kunlar soni.
+- **Bozor kapitalizatsiyasi**: aksiyalar soni ko'paytirilgan narx. Doirada har bir katakning kattaligi shunga qarab belgilanadi.
+
+### Signallar
+S.M.Z signallari arzon va o'zgaruvchan aksiyalar uchun tadqiqot filtrlaridir. Ular nomzodlar ro'yxatini beradi, sotib olish yoki sotish buyrug'ini emas. Ro'yxatdagi aksiyalarning ko'pi sakramaydi. Tarixiy raqamlarni "Signallar" bo'limida tekshiring.
+
+### Ma'lumot va manbalar
+Narxlar va kompaniya ma'lumotlari ilovaning o'z bazasidan olinadi; uni alohida yuklovchi yangilaydi (sahifa pastidagi sanaga qarang). Grafiklar TradingView'dan, yangiliklar stockanalysis.com'dan. Ma'lumot kechikishi, to'liq bo'lmasligi yoki noto'g'ri bo'lishi mumkin.
+
+### Foydalanish shartlari
+S.M.Z "mavjud holicha" taqdim etiladi, faqat ma'lumot va o'rganish uchun. Bu investitsiya, huquqiy yoki soliq maslahati emas va qimmatli qog'ozni sotib olish yoki sotish taklifi emas. Savdo, ayniqsa arzon aksiyalarda, barcha pulingizni yo'qotishga olib kelishi mumkin. Qarorlaringiz uchun faqat o'zingiz javobgarsiz.
+
+### Maxfiylik
+S.M.Z da akkaunt yo'q va shaxsiy profil saqlanmaydi. Kuzatuv ro'yxati va tanlangan til faqat brauzer oynasining manzilida saqlanadi. Hosting platformasi IP-manzil kabi texnik ma'lumotlarni yozib borishi mumkin. TradingView grafiklari va AI xizmatlari (tahlil va yangiliklar tarjimasi; ular tickerni, raqamlarni yoki yangilik matnini AI provayderiga yuboradi) uchinchi tomon xizmatlari bo'lib, o'z qoidalariga ega.
+
+*Bu matn oddiy tilda yozilgan ogohlantirish, huquqiy maslahat emas. Tijoriy ishga tushirishdan oldin uni yurist ko'rib chiqsin.*
+""",
+    "ru": """
+### Как пользоваться S.M.Z
+1. **Главная**: круг показывает весь рынок по секторам. Нажмите на сектор, чтобы открыть его; нажмите на акцию, чтобы открыть график.
+2. **Скринер**: выберите фильтры или готовый сигнал, затем нажмите на строку, чтобы открыть график.
+3. **Избранное**: ведите свой список. Нажмите ☆ внутри любого графика; список хранится в адресе страницы.
+4. **Сигналы**: посмотрите, как сигналы S.M.Z вели себя на прошлых данных и какие акции подходят сегодня.
+5. **Новости**: новости компаний и макрокалендарь. На узбекском и русском новости переводит ИИ.
+6. **Язык**: используйте поле выбора языка вверху (O'zbekcha, Русский, English).
+
+### Показатели
+- **Change (изменение)**: изменение цены к предыдущему закрытию, в процентах.
+- **Gap (разрыв открытия)**: разница между сегодняшним открытием и вчерашним закрытием.
+- **Rel Volume (относительный объём)**: сегодняшний объём, делённый на средний объём за предыдущие 20 дней. Выше 2 — необычный интерес.
+- **ATR / ATR %**: средний дневной диапазон за 14 дней в единицах цены и в процентах от цены. ATR % позволяет сравнивать дешёвые и дорогие акции.
+- **RSI (14)**: индикатор импульса от 0 до 100. Выше 70 часто называют перекупленностью, ниже 30 — перепроданностью.
+- **SMA20 / 50 / 200**: насколько цена удалена от средней за 20, 50 и 200 дней.
+- **52W High / Low**: удалённость от 52-недельного максимума и минимума.
+- **Spike20**: число дней за последние 20 торговых дней, когда закрытие выросло на 30%+.
+- **Капитализация**: число акций, умноженное на цену. По ней определяется размер каждой ячейки круга.
+
+### Сигналы
+Сигналы S.M.Z — исследовательские фильтры для дешёвых и волатильных акций. Они дают список кандидатов, а не приказ покупать или продавать. Большинство акций из списка не совершат скачок. Исторические цифры смотрите на вкладке «Сигналы».
+
+### Данные и источники
+Цены и данные компаний берутся из собственной базы приложения, которую обновляет отдельный загрузчик (см. дату внизу страницы). Графики предоставляет TradingView, новости — stockanalysis.com. Данные могут запаздывать, быть неполными или неверными.
+
+### Условия использования
+S.M.Z предоставляется «как есть», только для информации и обучения. Это не инвестиционная, юридическая или налоговая рекомендация и не предложение купить или продать ценные бумаги. Торговля, особенно дешёвыми акциями, может привести к потере всех денег. За свои решения вы отвечаете сами.
+
+### Конфиденциальность
+В S.M.Z нет аккаунтов, личный профиль не хранится. Список избранного и язык хранятся только в адресе вкладки браузера. Хостинг-платформа может записывать технические данные, например IP-адрес. Графики TradingView и сервисы ИИ (анализ и перевод новостей; они передают тикер, цифры или текст новости провайдеру ИИ) — сторонние сервисы со своими правилами.
+
+*Этот текст — уведомление простым языком, а не юридическая консультация. Перед коммерческим запуском его должен проверить юрист.*
+""",
+}
+
+
+def view_guide() -> list:
+    """Short manual, indicator glossary and the legal notes, in the chosen language."""
+    with keyed("guide"):
+        st.markdown(GUIDE.get(lang(), GUIDE["en"]))
     return []
 
 
@@ -2523,7 +3101,7 @@ def header(dates: list) -> tuple[str, Optional[str]]:
         S.pop("view", None)
     forced = None
     with keyed("topbar"):
-        spec = [1.0, 3.9, 1.1, 2.2]
+        spec = [1.0, 3.6, 1.05, 0.95, 2.0]
         try:
             c = st.columns(spec, vertical_alignment="center")
         except TypeError:
@@ -2532,24 +3110,26 @@ def header(dates: list) -> tuple[str, Optional[str]]:
         with c[1]:
             with keyed("nav"):
                 if hasattr(st, "segmented_control"):
-                    view = st.segmented_control("View", opts, default="Home", key="view",
+                    view = st.segmented_control("View", opts, default="Home", key="view", format_func=tl,
                                                 label_visibility="collapsed")
                 else:
-                    view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed")
+                    view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed", format_func=tl)
         c[2].selectbox("Date", dates, key="date", label_visibility="collapsed")
-        with c[3]:
+        c[3].selectbox("Language", list(LANGS), key="lang", format_func=LANGS.get, label_visibility="collapsed",
+                       on_change=_lang_sync)
+        with c[4]:
             with st.form("open_chart_form", border=False):
                 try:
                     f = st.columns([4, 1], vertical_alignment="center")
                 except TypeError:
                     f = st.columns([4, 1])
-                q = f[0].text_input("Search", key="open_q", placeholder="Search ticker",
+                q = f[0].text_input("Search", key="open_q", placeholder=tl("Search ticker"),
                                     label_visibility="collapsed")
-                go_ = f[1].form_submit_button("Go")
+                go_ = f[1].form_submit_button(tl("Go"))
             if go_:
                 forced = clean_symbol(q)
                 if forced is None:
-                    st.warning("Enter a valid ticker (letters and digits only).")
+                    st.warning(tl("Enter a valid ticker (letters and digits only)."))
     return view or "Home", forced
 
 
@@ -2579,8 +3159,7 @@ def main() -> None:
     view, forced = header(dates)
     exp = expected_session()
     if exp and dates and str(dates[0]) < exp:
-        st.caption(f"\u26a0 The database ends at {dates[0]}, but the market already traded {exp}. "
-                   "The data updater has not loaded the newer session yet.")
+        st.caption(tl("⚠ The database ends at {d}, but the market already traded {e}. The data updater has not loaded the newer session yet.", d=dates[0], e=exp))
     day = p[p["date"] == S["date"]]
     if view == "Home":
         items = view_home(day, meta)
@@ -2600,8 +3179,8 @@ def main() -> None:
         upd = datetime.fromtimestamp(db_stamp(), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     except Exception:  # noqa: BLE001
         upd = "-"
-    foot = (f"© {BRAND} | For informational purposes only, not investment advice. "
-            f"| Market data through {S.get('date', '-')} | database updated {upd}")
+    foot = (f"© {BRAND} | " + tl("For informational purposes only, not investment advice.") + " | "
+            + tl("Market data through {d}", d=S.get("date", "-")) + " | " + tl("database updated {u}", u=upd))
     st.caption(foot)
     if not S.get("_seo_done"):
         inject_seo()
@@ -2659,26 +3238,26 @@ def ai_panel(sym: str, row: Optional[pd.Series] = None) -> None:
 
     cache = S.setdefault("ai_cache", {})
     ckey = (sym, dt.date.today().isoformat())
-    if st.button("↻ Qayta tahlil", key="ai_refresh"):
+    if st.button(tl("↻ Re-run analysis"), key="ai_refresh"):
         cache.pop(ckey, None)
 
     if ckey not in cache:
         used = S.setdefault("ai_used", {})
         today = dt.date.today().isoformat()
         if used.get(today, 0) >= AI_DAILY_LIMIT:
-            st.warning(f"Kunlik AI limiti tugadi ({AI_DAILY_LIMIT} ta tahlil). Ertaga qayta urinib ko'ring.")
+            st.warning(tl("Daily AI limit reached ({n} analyses). Try again tomorrow.", n=AI_DAILY_LIMIT))
             return
-        with st.spinner(f"{sym} tahlil qilinmoqda..."):
+        with st.spinner(tl("Analysing {s}...", s=sym)):
             try:
                 cache[ckey] = run_analysis(sym, row)
                 used[today] = used.get(today, 0) + 1
             except Exception as e:  # noqa: BLE001
-                st.error(f"AI xatosi: {e}")
+                st.error(tl("AI error: {e}", e=e))
                 return
 
     with st.container(border=True):
         st.markdown(cache[ckey])
-    st.caption("Bu moliyaviy maslahat emas. Qaror o'zingizniki.")
+    st.caption(tl("This is not financial advice. The decision is yours."))
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -2689,23 +3268,29 @@ def _stock_news(sym: str) -> list:
 
 def stock_news_panel(sym: str, chg: dict) -> None:
     """Black full-screen section with the news of this single company only."""
-    st.markdown(f"### {sym} · company news")
+    st.markdown("### " + tl("{s} · company news", s=sym))
     periods = {"30 days": 720, "7 days": 168, "48 hours": 48, "24 hours": 24}
     top = st.columns([1.2, 6.8])
-    period = top[0].selectbox("Period", list(periods), key="sn_period")
-    with st.spinner(f"{sym} yangiliklari yuklanmoqda..."):
+    top[0].markdown(f'<div class="flabel">{html.escape(tl("Period"))}</div>', unsafe_allow_html=True)
+    period = top[0].selectbox("Period", list(periods), key="sn_period", label_visibility="collapsed", format_func=tl)
+    with st.spinner(tl("Loading {s} news...", s=sym)):
         try:
             items = _stock_news(sym)
         except Exception as e:  # noqa: BLE001
-            st.error(f"Yangiliklarni yuklab bo'lmadi: {type(e).__name__}")
+            st.error(tl("Could not load the news: {e}", e=type(e).__name__))
             return
     cut = time.time() - periods[period] * 3600
     arts = sorted(({**a, "main": sym} for a in items if a["ts"] >= cut), key=lambda a: -a["ts"])
     if not arts:
-        st.info(f"{sym} uchun so'nggi {period} ichida yangilik topilmadi.")
+        st.info(tl("No news for {s} in the last {p}.", s=sym, p=tl(period)))
         return
-    top[1].caption(f"{len(arts)} news | newest first | source: stockanalysis.com")
-    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in arts) + "</div>",
+    top[1].caption(tl("{n} news | newest first | source: stockanalysis.com", n=len(arts)))
+    news_lang_bar("news_orig2")
+    orig = bool(S.get("news_orig2"))
+    with st.spinner(tl("Translating...")):
+        shown, ok = translate_arts(arts[:25], orig)
+    news_lang_note(ok, orig)
+    st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in shown) + "</div>",
                 unsafe_allow_html=True)
 
 
@@ -2725,7 +3310,7 @@ def _open_chart_impl(sym: str, row: Optional[pd.Series] = None, day: Optional[pd
         if row is not None:
             parts += [f"${row['close']:.2f}", f"{row['chg']:+.2f}%"]
             if pd.notna(row["relvol"]):
-                parts.append(f"Rel Volume {row['relvol']:.1f}")
+                parts.append(f"{tl('Rel Volume')} {row['relvol']:.1f}")
             if pd.notna(row["rsi"]):
                 parts.append(f"RSI {row['rsi']:.0f}")
             if pd.notna(row["atr"]):
@@ -2736,11 +3321,11 @@ def _open_chart_impl(sym: str, row: Optional[pd.Series] = None, day: Optional[pd
                 parts.append(f"Spike20 {int(row['spike20'])}")
         top[0].markdown(f'<div class="chartbar">{" &nbsp;|&nbsp; ".join(parts)}</div>', unsafe_allow_html=True)
         if S.get("news_view"):
-            stretch(top[1].button, "← Grafikka qaytish", key="news_back", on_click=_ai_close)
+            stretch(top[1].button, tl("← Back to chart"), key="news_back", on_click=_ai_close)
         else:
-            stretch(top[1].button, "News", key="news_open", on_click=_news_open)
+            stretch(top[1].button, tl("News"), key="news_open", on_click=_news_open)
         in_wl = sym in S.get("watchlist", [])
-        stretch(top[2].button, "★ Saved" if in_wl else "☆ Watchlist", key="wl_toggle",
+        stretch(top[2].button, tl("★ Saved") if in_wl else tl("☆ Watchlist"), key="wl_toggle",
                 on_click=_wl_toggle, args=(sym,))
         tv_url = "https://www.tradingview.com/chart/?symbol=" + urllib.parse.quote(full_sym, safe="")
         try:
@@ -2750,10 +3335,10 @@ def _open_chart_impl(sym: str, row: Optional[pd.Series] = None, day: Optional[pd
                             'style="color:#10B981;font-weight:600">↗ TradingView</a>', unsafe_allow_html=True)
         if AI_OK:
             if S.get("ai_view"):
-                stretch(top[4].button, "← Grafikka qaytish", key="ai_back", on_click=_ai_close)
+                stretch(top[4].button, tl("← Back to chart"), key="ai_back", on_click=_ai_close)
             else:
                 stretch(top[4].button, "✦ S.M.Z AI", key="ai_open", on_click=_ai_open)
-        if stretch(top[5].button, "✕ Close", key="chart_close"):
+        if stretch(top[5].button, tl("✕ Close"), key="chart_close"):
             _chart_close()
             st.rerun()  # full rerun: the page behind comes back
         if S.get("news_view"):
