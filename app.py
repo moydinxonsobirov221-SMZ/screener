@@ -353,12 +353,33 @@ def tv_locale() -> str:
     return "ru" if lang() == "ru" else "en"
 
 
+SECTOR_SHORT = {
+    "Information Technology": ("Info Tech", "Axborot tex.", "ИТ"),
+    "Consumer Discretionary": ("Cons. Disc.", "Iste'mol (davriy)", "Потреб. (цикл.)"),
+    "Consumer Staples": ("Cons. Staples", "Zaruriy tovar", "Потреб. (баз.)"),
+    "Communication Services": ("Comm. Svcs", "Aloqa", "Связь"),
+    "Health Care": ("Health Care", "Sog'liq", "Здравоох."),
+    "Financials": ("Financials", "Moliya", "Финансы"),
+    "Industrials": ("Industrials", "Sanoat", "Промышл."),
+    "Energy": ("Energy", "Energetika", "Энергетика"),
+    "Materials": ("Materials", "Materiallar", "Материалы"),
+    "Real Estate": ("Real Estate", "Ko'chmas mulk", "Недвижим."),
+    "Utilities": ("Utilities", "Kommunal", "Коммунал."),
+    "Other": ("Other", "Boshqa", "Другое"),
+}
+
+
+def sector_short(k: str) -> str:
+    i = {"en": 0, "uz": 1, "ru": 2}[lang()]
+    return SECTOR_SHORT.get(k, (k, k, k))[i]
+
+
 def dial_tx() -> dict:
     """Texts for the circle map (drawn inside its own iframe)."""
     return {"gain": tl("Top 21 gainers"), "lose": tl("Top 21 losers"), "last": tl("Last"), "sector": tl("Sector"),
             "change": tl("Change"), "stocks": tl("stocks"), "enter": tl("click to enter"), "mcap": tl("Market Cap"),
             "price": tl("Price"), "volume": tl("Volume"), "tick": tl("Ticker"),
-            "sec": {k: tl(k) for k in SECTOR_NAMES}}
+            "sec": {k: tl(k) for k in SECTOR_NAMES}, "secs": {k: sector_short(k) for k in SECTOR_NAMES}}
 
 
 # ---- AI translation of news (Groq, free tier). Cached for everybody, so each text is translated once. ----
@@ -898,12 +919,59 @@ button:focus-visible,input:focus-visible,[role="option"]:focus-visible{outline:2
 .st-key-topbar [data-testid="stColumn"] [data-testid="stColumn"],.st-key-topbar [data-testid="column"] [data-testid="column"]{
   box-shadow:none !important}
 .tape .gem-g,.tape .gem-r{text-shadow:none !important}
-.flabel{font-size:.72rem;font-weight:600;color:#b4bac4;margin:0 0 3px 0;line-height:1.2}
+/* ---- labels above dropdowns: never overlapped by the dropdown ---- */
+.flabel{display:block;position:relative;z-index:2;font-size:.7rem;font-weight:600;color:#b4bac4;margin:0 0 5px 0;line-height:1.3}
+[data-testid="stMarkdownContainer"]:has(> .flabel),[data-testid="stElementContainer"]:has(.flabel){margin-bottom:0 !important}
+
+/* ---- compact, Apple-like type scale ---- */
+html{font-size:15px}
+.fsec{font-size:1.02rem;font-weight:600;margin:16px 0 8px 0;padding-bottom:8px}
+.resline{font-size:.78rem}
+div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{min-height:32px;font-size:.8rem}
+.stButton button,.stDownloadButton button,[data-testid="stDownloadButton"] button,button[data-testid="stBaseButton-secondary"]{min-height:32px;font-size:.8rem}
+.kpi{padding:3px 9px;min-width:90px}
+.kpi b{font-size:15px}
+.ttl{font-size:.74rem}
+
+/* ---- brand card: the "Founder" line stays inside the frame ---- */
+.smz-brand{line-height:1.1;padding:2px 0}
+.smz-brand .logo{font-size:22px;line-height:1.05}
+.fdr{margin-top:3px;line-height:1.1}
+.st-key-topbar [data-testid="stColumn"]{padding:10px 14px !important;min-height:58px}
+
+/* ---- language switch: three fixed buttons (nothing to type or erase) ---- */
+.st-key-langbox [role="radiogroup"]{gap:4px !important;flex-wrap:nowrap !important;justify-content:center}
+.st-key-langbox label{margin:0 !important;padding:5px 10px !important;border-radius:9px;border:1px solid rgba(255,255,255,.08);
+  cursor:pointer;background:transparent}
+.st-key-langbox label > div:first-child{display:none !important}
+.st-key-langbox label p{font-size:.76rem !important;font-weight:700;letter-spacing:.5px;color:#9aa0a8 !important;margin:0 !important}
+.st-key-langbox label:has(input:checked){background:rgba(16,185,129,.16);border-color:rgba(16,185,129,.55)}
+.st-key-langbox label:has(input:checked) p{color:#fff !important}
+.st-key-topbar [data-testid="stFormSubmitButton"] button{padding:0 14px;min-width:0}
+
+/* no ugly focus frame around the navigation tabs */
+.st-key-nav button:focus,.st-key-nav button:focus-visible{outline:none !important}
+
+/* ---- narrower windows: the same layout, just tighter ---- */
+@media (max-width: 1400px){
+  .st-key-nav button{padding:6px 8px !important}
+  .st-key-nav button p{font-size:.86rem !important}
+  .smz-brand .logo{font-size:20px}
+}
+@media (max-width: 1100px){
+  .st-key-topbar div[data-testid="stHorizontalBlock"]{flex-wrap:wrap}
+  .st-key-topbar [data-testid="stColumn"]{min-width:calc(50% - .4rem) !important}
+}
 </style>"""
 
 SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000"><script>
 (function () { try {
   var d = window.parent.document;
+  if (!d.head.querySelector("script[data-smz-ro]")) {
+    var r = d.createElement("script"); r.setAttribute("data-smz-ro", "1");
+    r.text = "(function(){function f(){document.querySelectorAll('div[data-baseweb=select] input').forEach(function(i){i.setAttribute('readonly','readonly');i.setAttribute('inputmode','none');});}new MutationObserver(f).observe(document.body,{childList:true,subtree:true});f();})();";
+    d.head.appendChild(r);
+  }
   if (d.head.querySelector("meta[data-smz]")) { return; }
   var title = "S.M.Z | Stock Screener";
   var desc = "S.M.Z (SMZ) is a stock screener and market map. Filter stocks by price, volume, gap, RSI, moving averages and more.";
@@ -997,11 +1065,11 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side .row.cols{cursor:default;color:#8b95a5;font-size:.82em;font-weight:600;height:20px}
 .side .row.cols:hover{background:transparent}
 .side .row span{display:block;box-sizing:border-box;padding:0 8px;overflow:hidden;text-overflow:ellipsis;border:0}
-.side .rk{width:30px;text-align:center;padding:0;color:#8b95a5;font-weight:400}
+.side .rk{width:34px;text-align:center;padding:0;color:#8b95a5;font-weight:400;overflow:visible;text-overflow:clip}
 .side .tk{width:74px;font-weight:700}
-.side .px{width:68px;text-align:right;font-variant-numeric:tabular-nums}
+.side .px{width:60px;text-align:right;font-variant-numeric:tabular-nums}
 .side .sc{flex:1;color:#9a9fa8;font-weight:400}
-.side .pc{width:84px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.side .pc{width:96px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
 .side .row.g .pc{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
 .side .row.r .pc{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
 </style></head><body><div id="stage"><svg id="svg"></svg><svg id="svg2"></svg></div><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
@@ -1467,18 +1535,40 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
           ev.stopPropagation(); tipP.style.display = "none";
           setValue({sector: g.name, n: Date.now() + Math.random()});
         });
+      /* every sector label is sized to fit inside its own slice (full name, short name, then ellipsis) */
+      var PSHORT = {"Information Technology": "Info Tech", "Consumer Discretionary": "Cons. Disc.",
+                    "Consumer Staples": "Cons. Staples", "Communication Services": "Comm. Svcs"};
+      var wOfP = function (t, f) { cvm.font = "700 " + f + "px Arial"; return cvm.measureText(t).width; };
+      groups.forEach(function (g) {
+        var span = Math.min(g.a1 - g.a0, Math.PI), full = SN(g.name), cands = [full], k, f, txt, best = null;
+        var sh = (TX.secs && TX.secs[g.name]) || PSHORT[g.name];
+        if (sh && sh !== full) { cands.push(sh); }
+        g.rr = n > 1 ? R * (span > 1.0 ? 0.6 : 0.8) : 0;
+        var chord = n > 1 ? 2 * g.rr * Math.sin(span / 2) * 0.9 : 2 * R * 0.8;
+        var fs0 = clamp(9, 22, Math.sqrt(span) * R * 0.07);
+        for (k = 0; k < cands.length && !best; k++) {
+          f = Math.min(fs0, chord * 0.98 / Math.max(0.01, wOfP(cands[k], 100) / 100), chord / 2.5);
+          if (f >= 9) { best = {t: cands[k], f: f}; }
+        }
+        if (!best) {
+          txt = cands[cands.length - 1]; f = clamp(8, 9, Math.min(fs0, chord / 2.5));
+          var cut = false;
+          while (txt.length > 3 && wOfP(txt, f) > chord * 0.98) { txt = txt.slice(0, -1); cut = true; }
+          best = {t: cut ? txt.replace(/\s+$/, "") + "\u2026" : txt, f: f};
+        }
+        g.lt = best.t; g.lf = best.f;
+      });
       var pl = rg.append("g").attr("pointer-events", "none").selectAll("g").data(groups).join("g")
         .attr("transform", function (g) {
-          var rr = R * (n > 1 ? 0.6 : 0);
-          return "translate(" + (rr * Math.cos(g.am)).toFixed(1) + "," + (rr * Math.sin(g.am)).toFixed(1) + ")";
+          return "translate(" + (g.rr * Math.cos(g.am)).toFixed(1) + "," + (g.rr * Math.sin(g.am)).toFixed(1) + ")";
         });
       var pc = pl.append("g").attr("class", "ctr");
       pc.append("text").attr("class", "t").attr("text-anchor", "middle")
-        .attr("font-size", function (g) { return clamp(9, 20, Math.sqrt(g.a1 - g.a0) * R * 0.07); })
-        .attr("y", -2).text(function (g) { return SN(g.name); });
+        .attr("font-size", function (g) { return g.lf; })
+        .attr("y", -2).text(function (g) { return g.lt; });
       pc.append("text").attr("class", "p").attr("text-anchor", "middle")
-        .attr("font-size", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055); })
-        .attr("y", function (g) { return clamp(9, 16, Math.sqrt(g.a1 - g.a0) * R * 0.055) + 4; })
+        .attr("font-size", function (g) { return Math.max(8, g.lf * 0.8); })
+        .attr("y", function (g) { return Math.max(8, g.lf * 0.8) + 3; })
         .text(function (g) { return fmtPct(g.perf); });
     }
 
@@ -1607,7 +1697,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
           h += "<div class=\"row " + (isGain ? "g" : "r") + "\" data-t=\"" + esc(r.ticker) + "\" style=\"height:" + rh + "px\">" +
             "<span class=\"rk\">" + (i + 1) + "</span><span class=\"tk\">" + esc(r.ticker) + "</span>" +
             "<span class=\"px\">" + (+r.price).toFixed(2) + "</span>" +
-            "<span class=\"sc\">" + esc((TX.sec && TX.sec[r.sector]) || SEC[r.sector] || r.sector || "-") + "</span>" +
+            "<span class=\"sc\">" + esc((TX.secs && TX.secs[r.sector]) || SEC[r.sector] || r.sector || "-") + "</span>" +
             "<span class=\"pc\">" + fmtPct(r.perf) + "</span></div>";
         });
         el.innerHTML = h;
@@ -2046,7 +2136,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v35", path=str(d))
+        return components.declare_component("smz_bubbles_v36", path=str(d))
     except Exception:
         return None
 
@@ -3101,7 +3191,7 @@ def header(dates: list) -> tuple[str, Optional[str]]:
         S.pop("view", None)
     forced = None
     with keyed("topbar"):
-        spec = [1.0, 3.6, 1.05, 0.95, 2.0]
+        spec = [1.0, 3.5, 1.05, 0.9, 2.3]
         try:
             c = st.columns(spec, vertical_alignment="center")
         except TypeError:
@@ -3115,14 +3205,16 @@ def header(dates: list) -> tuple[str, Optional[str]]:
                 else:
                     view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed", format_func=tl)
         c[2].selectbox("Date", dates, key="date", label_visibility="collapsed")
-        c[3].selectbox("Language", list(LANGS), key="lang", format_func=LANGS.get, label_visibility="collapsed",
-                       on_change=_lang_sync)
+        with c[3]:
+            with keyed("langbox"):
+                st.radio("Language", list(LANGS), key="lang", horizontal=True, label_visibility="collapsed",
+                         format_func=lambda k: k.upper(), on_change=_lang_sync)
         with c[4]:
             with st.form("open_chart_form", border=False):
                 try:
-                    f = st.columns([4, 1], vertical_alignment="center")
+                    f = st.columns([3.2, 1.4], vertical_alignment="center")
                 except TypeError:
-                    f = st.columns([4, 1])
+                    f = st.columns([3.2, 1.4])
                 q = f[0].text_input("Search", key="open_q", placeholder=tl("Search ticker"),
                                     label_visibility="collapsed")
                 go_ = f[1].form_submit_button(tl("Go"))
@@ -3157,6 +3249,11 @@ def main() -> None:
     dates = sorted(p["date"].unique(), reverse=True)
 
     view, forced = header(dates)
+    try:
+        if st.query_params.get("lang") != S.get("lang"):
+            _lang_sync()
+    except Exception:  # noqa: BLE001
+        pass
     exp = expected_session()
     if exp and dates and str(dates[0]) < exp:
         st.caption(tl("⚠ The database ends at {d}, but the market already traded {e}. The data updater has not loaded the newer session yet.", d=dates[0], e=exp))
