@@ -234,6 +234,9 @@ TRX = {
     "Under $300mln": ("$300 mln dan past", "Ниже $300 млн"),
     "Over $2bln": ("$2 mlrd dan yuqori", "Выше $2 млрд"),
     "Translating...": ("Tarjima qilinmoqda...", "Перевод..."),
+    "Translation in progress... the original text is shown until it is ready.": (
+        "Tarjima davom etmoqda... tayyor bo'lguncha asl matn ko'rsatiladi.",
+        "Перевод выполняется... пока он не готов, показан оригинал."),
     # watchlist
     "Tickers (you can also add with the ☆ button inside any chart)": (
         "Tickerlar (grafik ichidagi ☆ tugmasi bilan ham qo'shish mumkin)", "Тикеры (можно также добавить кнопкой ☆ внутри графика)"),
@@ -287,7 +290,7 @@ def lang() -> str:
     return v if v in LANGS else "en"
 
 
-def tl(s: str, **kw) -> str:
+def tl(s: str, /, **kw) -> str:
     """Translate an English UI text into the chosen language (unknown texts stay as they are)."""
     l = lang()
     tr = TRX.get(s)
@@ -363,7 +366,7 @@ SECTOR_SHORT = {
     "Industrials": ("Industrials", "Sanoat", "Промышл."),
     "Energy": ("Energy", "Energetika", "Энергетика"),
     "Materials": ("Materials", "Materiallar", "Материалы"),
-    "Real Estate": ("Real Estate", "Ko'chmas mulk", "Недвижим."),
+    "Real Estate": ("Real Estate", "Ko'ch. mulk", "Недвижим."),
     "Utilities": ("Utilities", "Kommunal", "Коммунал."),
     "Other": ("Other", "Boshqa", "Другое"),
 }
@@ -411,7 +414,7 @@ _TR_RULES_RU = (
 
 @st.cache_resource(show_spinner=False)
 def _tr_store() -> dict:
-    return {"cache": {}, "lock": threading.Lock(), "err": ""}
+    return {"cache": {}, "lock": threading.Lock(), "err": "", "busy": set()}
 
 
 def _groq_key() -> str:
@@ -454,10 +457,14 @@ def _groq_translate(texts: list, l: str) -> list:
     return [str(x) for x in arr]
 
 
-def _translate_texts(texts: list, l: str) -> dict:
+def _translate_texts(texts: list, l: str, wait: float = 6.0) -> dict:
+    """Translate in background threads; wait at most `wait` seconds, the rest finishes by itself."""
     store = _tr_store()
-    cache = store["cache"]
-    need = [x for x in texts if (l, x) not in cache]
+    cache, busy = store["cache"], store["busy"]
+    with store["lock"]:
+        need = [x for x in texts if (l, x) not in cache and (l, x) not in busy]
+        for x in need:
+            busy.add((l, x))
     batches = [need[i:i + 8] for i in range(0, len(need), 8)]
 
     def work(b: list) -> None:
@@ -469,11 +476,30 @@ def _translate_texts(texts: list, l: str) -> dict:
                         cache[(l, src)] = dst.strip()
         except Exception as e:  # noqa: BLE001
             store["err"] = f"{type(e).__name__}: {e}"
+        finally:
+            with store["lock"]:
+                for x in b:
+                    busy.discard((l, x))
 
-    if batches:
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            list(ex.map(work, batches))
+    for b in batches:
+        threading.Thread(target=work, args=(b,), daemon=True).start()
+    t0 = time.time()
+    while time.time() - t0 < wait and any((l, x) in busy for x in texts):
+        time.sleep(0.15)
     return {x: cache[(l, x)] for x in texts if (l, x) in cache}
+
+
+def translation_pending() -> bool:
+    return bool(_tr_store()["busy"])
+
+
+def _poll_fragment(seconds: float = 2.0) -> None:
+    """Re-run only the current fragment after a short pause (used while a translation is still running)."""
+    time.sleep(seconds)
+    try:
+        st.rerun(scope="fragment")
+    except Exception:  # noqa: BLE001 - not inside a fragment re-run: nothing to do
+        pass
 
 
 def translate_arts(arts: list, orig: bool = False) -> tuple:
@@ -505,6 +531,8 @@ def news_lang_note(ok: bool, orig: bool) -> None:
         return
     if ok:
         st.caption(tl("Translated by AI. Financial terms are kept consistent; check the original for important decisions."))
+    elif translation_pending():
+        st.caption(tl("Translation in progress... the original text is shown until it is ready."))
     else:
         st.caption(tl("Translation is not available now (no AI key or a temporary error). The original English text is shown."))
 
@@ -920,14 +948,14 @@ button:focus-visible,input:focus-visible,[role="option"]:focus-visible{outline:2
   box-shadow:none !important}
 .tape .gem-g,.tape .gem-r{text-shadow:none !important}
 /* ---- labels above dropdowns: never overlapped by the dropdown ---- */
-.flabel{display:block;position:relative;z-index:2;font-size:.7rem;font-weight:600;color:#b4bac4;margin:0 0 5px 0;line-height:1.3}
+.flabel{display:block;position:relative;z-index:2;font-size:.74rem;font-weight:600;color:#b4bac4;margin:0 0 5px 0;line-height:1.3}
 [data-testid="stMarkdownContainer"]:has(> .flabel),[data-testid="stElementContainer"]:has(.flabel){margin-bottom:0 !important}
 
 /* ---- compact, Apple-like type scale ---- */
-html{font-size:15px}
-.fsec{font-size:1.02rem;font-weight:600;margin:16px 0 8px 0;padding-bottom:8px}
-.resline{font-size:.78rem}
-div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{min-height:32px;font-size:.8rem}
+html{font-size:16px}
+.fsec{font-size:1.1rem;font-weight:600;margin:16px 0 8px 0;padding-bottom:8px}
+.resline{font-size:.82rem}
+div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{min-height:34px;font-size:.85rem}
 .stButton button,.stDownloadButton button,[data-testid="stDownloadButton"] button,button[data-testid="stBaseButton-secondary"]{min-height:32px;font-size:.8rem}
 .kpi{padding:3px 9px;min-width:90px}
 .kpi b{font-size:15px}
@@ -949,6 +977,16 @@ div[data-baseweb="select"] > div,.stTextInput input,.stNumberInput input{min-hei
 .st-key-langbox label:has(input:checked) p{color:#fff !important}
 .st-key-topbar [data-testid="stFormSubmitButton"] button{padding:0 14px;min-width:0}
 
+/* news sub-tabs: same look as the main menu */
+.st-key-news_sub [data-testid="stButtonGroup"]{background:transparent !important;border:0 !important;padding:0 !important;gap:4px}
+.st-key-news_sub button{background:transparent !important;border:0 !important;border-radius:0 !important;box-shadow:none !important;
+  min-height:34px;padding:6px 12px !important;color:#7d8594 !important;font-weight:500;border-bottom:2px solid transparent !important}
+.st-key-news_sub button p{color:inherit !important;font-size:.95rem !important;margin:0}
+.st-key-news_sub button:hover{color:#e6e6e6 !important}
+.st-key-news_sub button[kind="segmented_controlActive"],.st-key-news_sub button[data-testid="stBaseButton-segmented_controlActive"]{
+  color:#fff !important;font-weight:600;border-bottom:2px solid #10B981 !important}
+.st-key-news_sub button:focus,.st-key-news_sub button:focus-visible{outline:none !important}
+
 /* no ugly focus frame around the navigation tabs */
 .st-key-nav button:focus,.st-key-nav button:focus-visible{outline:none !important}
 
@@ -969,7 +1007,7 @@ SEO_DOC = """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style
   var d = window.parent.document;
   if (!d.head.querySelector("script[data-smz-ro]")) {
     var r = d.createElement("script"); r.setAttribute("data-smz-ro", "1");
-    r.text = "(function(){function f(){document.querySelectorAll('div[data-baseweb=select] input').forEach(function(i){i.setAttribute('readonly','readonly');i.setAttribute('inputmode','none');});}new MutationObserver(f).observe(document.body,{childList:true,subtree:true});f();})();";
+    r.text = "(function(){var t=0;function f(){document.querySelectorAll('div[data-baseweb=select] input').forEach(function(i){i.setAttribute('readonly','readonly');i.setAttribute('inputmode','none');});}new MutationObserver(function(){if(t){return;}t=setTimeout(function(){t=0;f();},150);}).observe(document.body,{childList:true,subtree:true});f();})();";
     d.head.appendChild(r);
   }
   if (d.head.querySelector("meta[data-smz]")) { return; }
@@ -1065,11 +1103,13 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
 .side .row.cols{cursor:default;color:#8b95a5;font-size:.82em;font-weight:600;height:20px}
 .side .row.cols:hover{background:transparent}
 .side .row span{display:block;box-sizing:border-box;padding:0 8px;overflow:hidden;text-overflow:ellipsis;border:0}
-.side .rk{width:34px;text-align:center;padding:0;color:#8b95a5;font-weight:400;overflow:visible;text-overflow:clip}
-.side .tk{width:74px;font-weight:700}
-.side .px{width:60px;text-align:right;font-variant-numeric:tabular-nums}
+.side .rk{width:28px;text-align:center;padding:0;color:#8b95a5;font-weight:400;overflow:visible;text-overflow:clip}
+.side .tk{width:66px;font-weight:700}
+.side.nosec .sc{display:none}
+.side.nosec .tk{flex:1;width:auto}
+.side .px{width:58px;text-align:right;font-variant-numeric:tabular-nums}
 .side .sc{flex:1;color:#9a9fa8;font-weight:400}
-.side .pc{width:96px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.side .pc{width:86px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
 .side .row.g .pc{color:#10B981;text-shadow:0 0 6px rgba(16,185,129,.25)}
 .side .row.r .pc{color:#EF4444;text-shadow:0 0 6px rgba(239,68,68,.25)}
 </style></head><body><div id="stage"><svg id="svg"></svg><svg id="svg2"></svg></div><div id="tip"></div><div id="legend"></div><div id="msg"></div><div id="gl" class="side"></div><div id="ll" class="side"></div>
@@ -1081,7 +1121,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
               "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js",
               "https://unpkg.com/d3@7.9.0/dist/d3.min.js"];
   var GREEN = ["#10B981", "#0B8F66", "#065F46"], RED = ["#EF4444", "#C62F3E", "#8B1A2B"];
-  var EXP = 0.32, CLICK_DEG = 3.6;
+  var EXP = 0.32, CLICK_DEG = 3.6, VCACHE = {};
   var args = null, lastKey = null, resizeTimer = null, TX = {};
   var rot = 0, vel = 0, raf = null, lastStep = 0, applyRot = function () {};
   var audio = null, muted = false, lastClickT = 0;
@@ -1238,6 +1278,15 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
   }
   function voronoiSector(g, R) {
     var its = g.items, n = its.length, base = wedgePolygon(g, R), i, j, iter;
+    var ck = JSON.stringify([+R.toFixed(1), g.full ? 1 : 0, +g.a0.toFixed(4), +g.a1.toFixed(4),
+                             its.map(function (it) { return it.d.ticker + ":" + it.d.mcap; })]);
+    if (VCACHE[ck]) {          /* same sector, same size: reuse the finished layout (instant) */
+      var hit = VCACHE[ck];
+      its.forEach(function (it, ii) {
+        var h = hit[ii]; it.T = h.T; it.poly = h.poly; it.area = h.area; it.cx = h.cx; it.cy = h.cy; it.r = h.r;
+      });
+      return 0;
+    }
     var Atot = Math.abs(polyArea(base)), sx = [], sy = [], w = [];
     its.forEach(function (it, idx) {
       it.T = Atot * it.rho * it.rho / g.S;
@@ -1262,7 +1311,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       cells = [base];
     } else {
       for (iter = 0; iter < 100; iter++) {
-        ords = orders();
+        if (iter % 4 === 0 || !ords) { ords = orders(); }     /* neighbour order changes slowly: sort every 4th round */
         cells = its.map(function (_, ii) { return cellOf(ii, sx, sy, w, base, ords[ii]); });
         var maxErr = 0, wm = 0;
         for (i = 0; i < n; i++) {
@@ -1301,6 +1350,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
       it.poly = poly; it.area = area; it.cx = c[0]; it.cy = c[1]; it.r = Math.sqrt(area / Math.PI);
       worst = Math.max(worst, Math.abs(it.T - area) / it.T);
     });
+    VCACHE[ck] = its.map(function (it) { return {T: it.T, poly: it.poly, area: it.area, cx: it.cx, cy: it.cy, r: it.r}; });
     return worst;
   }
 
@@ -1687,6 +1737,7 @@ text.num{fill:#fff;fill-opacity:.9;font-weight:600;pointer-events:none}
                  "Health Care": "Health Care", "Real Estate": "Real Estate"};
       function fill(id, rows, title, isGain, x) {
         var el = document.getElementById(id);
+        el.className = wl >= 340 ? "side" : "side nosec";     /* narrow panel: drop the sector column, keep the numbers whole */
         x = clamp(2, Math.max(2, W - wl - 2), x);
         el.style.left = x + "px"; el.style.top = y0 + "px"; el.style.width = wl + "px"; el.style.display = "block";
         el.style.fontSize = clamp(11, 14, rh * 0.58) + "px";
@@ -1854,14 +1905,13 @@ def init_state() -> None:
         S.setdefault(k, v)
     S.setdefault("sort_by", "Change")
     S.setdefault("sort_asc", False)
-    if "lang" not in S:
-        try:
-            raw = st.query_params.get("lang", "")
-            if isinstance(raw, list):
-                raw = raw[0] if raw else ""
-        except Exception:  # noqa: BLE001
-            raw = ""
-        S["lang"] = raw if raw in LANGS else "uz"
+    if S.get("lang") not in LANGS:
+        S["lang"] = "en"  # the site always opens in English; the visitor can choose another language
+    try:
+        if "lang" in st.query_params:  # old links: the language is no longer kept in the address
+            del st.query_params["lang"]
+    except Exception:  # noqa: BLE001
+        pass
     if "watchlist" not in S:  # the watchlist lives in the page URL (?wl=AAA,BBB): survives reloads, can be shared
         try:
             raw = st.query_params.get("wl", "")
@@ -2136,7 +2186,7 @@ def get_bubble_component():
     if d is None:
         return None
     try:
-        return components.declare_component("smz_bubbles_v36", path=str(d))
+        return components.declare_component("smz_bubbles_v37", path=str(d))
     except Exception:
         return None
 
@@ -2464,7 +2514,7 @@ def news_card_html(a: dict, chg: dict) -> str:
     return f'<div class="nw"><div class="nimg">{img}</div><div class="nbody"><div class="nmeta">{meta}</div>{title}{summ}{oth}</div></div>'
 
 
-def _company_news(day: pd.DataFrame) -> None:
+def _company_news(day: pd.DataFrame, live: bool = False) -> None:
     top = st.columns([1.2, 6.8])
     top[0].markdown(f'<div class="flabel">{html.escape(tl("Period"))}</div>', unsafe_allow_html=True)
     period = top[0].selectbox("Period", ["24 hours", "48 hours", "7 days"], index=0, key="news_period",
@@ -2474,9 +2524,6 @@ def _company_news(day: pd.DataFrame) -> None:
     data, loading = news_data(tickers)
     if data is None:
         st.info(tl("Loading company news in the background. This takes about a minute the first time; the page updates by itself and stays usable meanwhile."))
-        if loading and hasattr(st, "fragment"):
-            time.sleep(3)
-            st.rerun(scope="fragment")
         return
     cut = time.time() - hours * 3600
     chg = dict(zip(day["ticker"], day["chg"]))
@@ -2517,9 +2564,26 @@ def _company_news(day: pd.DataFrame) -> None:
                 unsafe_allow_html=True)
     if len(ranked) > limit:
         st.button(tl("Show more"), key="news_more", on_click=_news_more)
+    pend = translation_pending()
+    if live and not pend:
+        st.rerun()  # everything is ready: back to the calm (non-polling) version
+    if pend and not live:
+        st.rerun()  # a translation is still running: switch to the polling version
 
 
-company_news = st.fragment(_company_news) if hasattr(st, "fragment") else _company_news
+def _company_news_plain(day: pd.DataFrame) -> None:
+    _company_news(day, False)
+
+
+def _company_news_live(day: pd.DataFrame) -> None:
+    _company_news(day, True)
+
+
+company_news = st.fragment(_company_news_plain) if hasattr(st, "fragment") else _company_news_plain
+try:  # polling version: the news list refreshes itself while the download / translation is running
+    company_news_live = st.fragment(run_every=3)(_company_news_live)
+except TypeError:  # old Streamlit without run_every
+    company_news_live = company_news
 
 
 def macro_news() -> None:
@@ -2536,7 +2600,10 @@ def view_news(day: pd.DataFrame, meta: dict) -> list:
     if sub == "Macro":
         macro_news()
     else:
-        company_news(day)
+        if _news_store()["data"] is None or translation_pending():
+            company_news_live(day)
+        else:
+            company_news(day)
     return []
 
 
@@ -3205,10 +3272,8 @@ def header(dates: list) -> tuple[str, Optional[str]]:
                 else:
                     view = st.radio("View", opts, horizontal=True, key="view", label_visibility="collapsed", format_func=tl)
         c[2].selectbox("Date", dates, key="date", label_visibility="collapsed")
-        with c[3]:
-            with keyed("langbox"):
-                st.radio("Language", list(LANGS), key="lang", horizontal=True, label_visibility="collapsed",
-                         format_func=lambda k: k.upper(), on_change=_lang_sync)
+        c[3].selectbox("Language", ["ru", "en", "uz"], key="lang", format_func=LANGS.get,
+                       label_visibility="collapsed")
         with c[4]:
             with st.form("open_chart_form", border=False):
                 try:
@@ -3249,11 +3314,6 @@ def main() -> None:
     dates = sorted(p["date"].unique(), reverse=True)
 
     view, forced = header(dates)
-    try:
-        if st.query_params.get("lang") != S.get("lang"):
-            _lang_sync()
-    except Exception:  # noqa: BLE001
-        pass
     exp = expected_session()
     if exp and dates and str(dates[0]) < exp:
         st.caption(tl("⚠ The database ends at {d}, but the market already traded {e}. The data updater has not loaded the newer session yet.", d=dates[0], e=exp))
@@ -3389,6 +3449,8 @@ def stock_news_panel(sym: str, chg: dict) -> None:
     news_lang_note(ok, orig)
     st.markdown('<div class="nlist">' + "".join(news_card_html(a, chg) for a in shown) + "</div>",
                 unsafe_allow_html=True)
+    if translation_pending():
+        _poll_fragment()
 
 
 def _open_chart_impl(sym: str, row: Optional[pd.Series] = None, day: Optional[pd.DataFrame] = None) -> None:
