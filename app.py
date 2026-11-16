@@ -557,6 +557,10 @@ BRAND = "S.M.Z"
 PAGE_TITLE = "S.M.Z | Stock Screener"
 FOUNDER_NAME = "Sobirov Moydinxon Zaynobiddinvich"
 INF = float("inf")
+# stocks that must not appear anywhere on the site (add more symbols here if needed)
+EXCLUDED_TICKERS = {"KOFUBL.MX"}
+# non-US listings carry an exchange suffix (.MX Mexico, .TO Toronto, .SA Brazil ...): they are dropped automatically
+FOREIGN_SUFFIX = (r"\.(?:MX|TO|SA|HK|AX|DE|PA|MI|SW|SS|SZ|KS|TW|NS|BO|SI|JK|KL|BK|TA|ST|HE|OL|CO|AS|BR|LS|MC|VI|IR|WA)$")
 
 
 def _updown(steps) -> dict:
@@ -1855,6 +1859,11 @@ def load_data(stamp: float = 0.0) -> tuple[pd.DataFrame, dict]:
             f[col] = np.nan
     f = f[["ticker", "mcap", "float_sh", "short_pct", "industry", "exchange"]]
 
+    def _wanted(df: pd.DataFrame) -> pd.DataFrame:
+        sym = df["ticker"].astype(str)
+        return df[~sym.isin(EXCLUDED_TICKERS) & ~sym.str.upper().str.contains(FOREIGN_SUFFIX, regex=True)]
+
+    p, t, f = _wanted(p), _wanted(t), _wanted(f)
     p = p.drop_duplicates(["ticker", "date"]).sort_values(["ticker", "date"]).reset_index(drop=True)
     g = p.groupby("ticker", sort=False)
     prev = g["close"].shift(1)
@@ -2040,6 +2049,39 @@ def render_iframe(doc: str, height: int, quiet: bool = False) -> None:
             st.warning("The chart could not load in this browser.")
 
 
+def tv_style() -> dict:
+    """TradingView chart look, taken from the owner's own TradingView settings:
+    candle body / border / wick colours, black canvas, quiet grid, scale text. Volume starts hidden."""
+    up_b, dn_b = "#335C2C", "#75272A"          # border + wick: up / down
+    up_body, dn_body = "#20321D", "#391819"     # body (transparent look on black): up / down
+    return {
+        "hide_volume": True,
+        "gridColor": "rgba(242, 242, 242, 0.06)",
+        "overrides": {
+            "mainSeriesProperties.candleStyle.upColor": up_body,
+            "mainSeriesProperties.candleStyle.downColor": dn_body,
+            "mainSeriesProperties.candleStyle.drawBorder": True,
+            "mainSeriesProperties.candleStyle.borderUpColor": up_b,
+            "mainSeriesProperties.candleStyle.borderDownColor": dn_b,
+            "mainSeriesProperties.candleStyle.drawWick": True,
+            "mainSeriesProperties.candleStyle.wickUpColor": up_b,
+            "mainSeriesProperties.candleStyle.wickDownColor": dn_b,
+            "paneProperties.backgroundType": "solid",
+            "paneProperties.background": "#000000",
+            "paneProperties.vertGridProperties.color": "rgba(242, 242, 242, 0.06)",
+            "paneProperties.horzGridProperties.color": "rgba(242, 242, 242, 0.06)",
+            "paneProperties.separatorColor": "#323232",
+            "scalesProperties.textColor": "#B7B7B7",
+            "scalesProperties.lineColor": "#8E8E8F",
+            "scalesProperties.fontSize": 12,
+        },
+        "studies_overrides": {          # if you add the Volume indicator yourself, its bars use the same colours
+            "volume.volume.color.0": "rgba(117, 39, 42, 0.7)",
+            "volume.volume.color.1": "rgba(51, 92, 44, 0.7)",
+        },
+    }
+
+
 def chart_doc(symbol: str, init_height: int = 700, offset: int = 170) -> str:
     """HTML for the advanced chart widget with an explicit pixel height.
 
@@ -2051,6 +2093,7 @@ def chart_doc(symbol: str, init_height: int = 700, offset: int = 170) -> str:
            "backgroundColor": "#000000", "allow_symbol_change": True, "hide_side_toolbar": False,
            "withdateranges": True, "save_image": True, "calendar": False, "details": False,
            "support_host": "https://www.tradingview.com"}
+    cfg.update(tv_style())
     payload = json.dumps(cfg).replace("</", "<\\/")
     return (CHART_TEMPLATE.replace("__CFG__", payload).replace("__H__", str(int(init_height)))
             .replace("__OFFSET__", str(int(offset))))
@@ -3018,6 +3061,7 @@ def grid_chart_doc(symbol: str, height: int = 380) -> str:
            "backgroundColor": "#000000", "allow_symbol_change": False, "hide_side_toolbar": True,
            "withdateranges": False, "save_image": False, "calendar": False, "details": False,
            "support_host": "https://www.tradingview.com"}
+    cfg.update(tv_style())
     payload = json.dumps(cfg).replace("</", "<\\/")
     return GRID_TEMPLATE.replace("__CFG__", payload).replace("__H__", str(int(height)))
 
