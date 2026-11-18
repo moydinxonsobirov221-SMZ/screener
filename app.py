@@ -205,6 +205,7 @@ TRX = {
     "Average Volume": ("O'rtacha hajm", "Средний объём"),
     "Relative Volume": ("Nisbiy hajm", "Относительный объём"),
     "Signal": ("Signal", "Сигнал"),
+    "Industry": ("Tarmoq", "Отрасль"),
     "Gap %": ("Gap % (ochilish farqi)", "Гэп % (разрыв открытия)"),
     "ATR ($)": ("ATR ($, kunlik diapazon)", "ATR ($, дневной диапазон)"),
     "RSI (14)": ("RSI (14, impuls)", "RSI (14, импульс)"),
@@ -642,7 +643,8 @@ EXCH_CODES = {"NMS": "NASDAQ", "NGM": "NASDAQ", "NCM": "NASDAQ", "NAS": "NASDAQ"
 
 # default value of every filter widget (the key is also the session_state key)
 D = dict(exch="Any", price="Any", avgvol="Any", relvol="Any", chg="Any", gap="Any", atr="Any", atrp="Any",
-         spike="Any", rsi="Any", s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any")
+         spike="Any", rsi="Any", s20="Any", s50="Any", s200="Any", hl52="Any", mcap="Any",
+         sector="Any", industry="Any")
 
 SIGNALS = {
     "None": {},
@@ -1971,6 +1973,10 @@ def apply_filters(day: pd.DataFrame, s, meta: dict) -> pd.DataFrame:
     x = day
     if s["exch"] != "Any":
         x = x[x["exch"] == s["exch"]]
+    if s.get("sector", "Any") != "Any":
+        x = x[x["sector"] == s["sector"]]
+    if s.get("industry", "Any") != "Any" and "industry" in x.columns:
+        x = x[x["industry"] == s["industry"]]
     x = _opt(x, "close", PRICE, s["price"])
     x = _opt(x, "avgvol", VOLUME, s["avgvol"])
     x = _opt(x, "relvol", RELVOL, s["relvol"])
@@ -2797,6 +2803,17 @@ def filter_ui(day: pd.DataFrame, meta: dict) -> None:
         _sel(a[2], "Average Volume", VOLUME, "avgvol")
         _sel(a[3], "Relative Volume", RELVOL, "relvol")
         _sel(a[4], "Price", PRICE, "price")
+        secs = ["Any"] + sorted(str(v) for v in day["sector"].dropna().unique())
+        if S.get("sector", "Any") not in secs:
+            S["sector"] = "Any"
+        _sel(a[5], "Sector", secs, "sector")
+        has_ind = bool(meta.get("has_industry")) and "industry" in day.columns
+        src = day if S.get("sector", "Any") == "Any" else day[day["sector"] == S["sector"]]
+        inds = ["Any"] + (sorted(str(v) for v in src["industry"].dropna().unique()) if has_ind else [])
+        if S.get("industry", "Any") not in inds:  # the chosen sector does not contain this industry any more
+            S["industry"] = "Any"
+        a2 = st.columns(6)
+        _sel(a2[0], "Industry", inds, "industry", disabled=not has_ind)
 
         st.markdown(f'<div class="fsec">{html.escape(tl("Technical & Trend Filters"))}</div>', unsafe_allow_html=True)
         b = st.columns(6)
@@ -2993,7 +3010,8 @@ def view_screener(day: pd.DataFrame, meta: dict) -> list:
     filter_ui(day, meta)
     x = apply_filters(day, S, meta)
 
-    order = ["ticker", "sector"] + (["mcap"] if meta["has_fund"] else []) + \
+    order = ["ticker", "sector"] + (["industry"] if meta.get("has_industry") else []) + \
+            (["mcap"] if meta["has_fund"] else []) + \
             ["close", "chg", "gap", "volume", "avgvol", "relvol", "atr", "atrp", "spike20", "rsi", "d20", "d50",
              "d200", "hid", "lod", "pw", "pm", "pq"]
     names = [COLS[c] for c in order]
